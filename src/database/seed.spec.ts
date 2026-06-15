@@ -50,6 +50,17 @@ describe('seedDatabase', () => {
     expect(dataSource.getRepository).toHaveBeenCalledTimes(1);
   });
 
+  it('skips seeding when data source is not initialized', async () => {
+    const dataSource = {
+      isInitialized: false,
+      getRepository: jest.fn(),
+    } as unknown as DataSource;
+
+    await expect(seedDatabase(dataSource)).resolves.toBeUndefined();
+
+    expect(dataSource.getRepository).not.toHaveBeenCalled();
+  });
+
   it('seeds packages, assets, metrics, logs, wallet, and transactions when empty', async () => {
     const pkgRepo = createRepo();
     const tagRepo = createRepo();

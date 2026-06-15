@@ -19,6 +19,11 @@ import {
 export async function seedDatabase(dataSource: DataSource): Promise<void> {
   const logger = new Logger('Seed');
 
+  if ('isInitialized' in dataSource && !dataSource.isInitialized) {
+    logger.warn('DataSource is not initialized, skipping seed.');
+    return;
+  }
+
   // Only seed if no credit packages exist
   const pkgRepo = dataSource.getRepository(CreditPackage);
   const existing = await pkgRepo.count();

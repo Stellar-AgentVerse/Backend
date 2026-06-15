@@ -6,6 +6,7 @@ export interface DatabaseEnv {
   database: string;
   synchronize: boolean;
   logging: boolean;
+  seedOnStartup: boolean;
 }
 
 export interface JwtEnv {
@@ -42,6 +43,7 @@ export const DEV_DEFAULTS = {
     database: 'agentverse',
     synchronize: true,
     logging: false,
+    seedOnStartup: true,
   },
   jwt: {
     secret: 'dev-secret',

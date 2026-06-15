@@ -19,6 +19,7 @@ describe('validateEnv', () => {
       database: 'agentverse',
       synchronize: true,
       logging: false,
+      seedOnStartup: true,
     });
     expect(env.jwt).toEqual({
       secret: 'dev-secret',
@@ -67,6 +68,15 @@ describe('validateEnv', () => {
         CORS_ORIGINS: 'https://app.example',
       }),
     ).toThrow('JWT_SECRET is required in production');
+  });
+
+  it('allows disabling database seed on startup explicitly', () => {
+    const env = validateEnv({
+      NODE_ENV: 'development',
+      DB_SEED_ON_STARTUP: 'false',
+    });
+
+    expect(env.db.seedOnStartup).toBe(false);
   });
 
   it('caches the validated environment for later consumers', () => {

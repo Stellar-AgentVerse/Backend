@@ -106,6 +106,7 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
       database: env.DB_NAME ?? DEV_DEFAULTS.db.database,
       synchronize: parseBoolean(env.DB_SYNCHRONIZE, isProduction ? false : DEV_DEFAULTS.db.synchronize, 'DB_SYNCHRONIZE'),
       logging: parseBoolean(env.DB_LOGGING, DEV_DEFAULTS.db.logging, 'DB_LOGGING'),
+      seedOnStartup: parseBoolean(env.DB_SEED_ON_STARTUP, !isProduction, 'DB_SEED_ON_STARTUP'),
     },
     jwt: {
       secret: env.JWT_SECRET ?? DEV_DEFAULTS.jwt.secret,
