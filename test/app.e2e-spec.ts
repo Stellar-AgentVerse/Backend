@@ -3,7 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
-import { HealthModule } from '../src/health/health.module';
+import { HealthController } from '../src/health/health.controller';
 
 describe('HealthController (e2e)', () => {
   let app: INestApplication<App>;
@@ -13,7 +13,7 @@ describe('HealthController (e2e)', () => {
 
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [HealthModule],
+      controllers: [HealthController],
       providers: [{ provide: DataSource, useValue: dataSourceMock }],
     }).compile();
 

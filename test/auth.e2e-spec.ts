@@ -2,7 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module';
+import { ConfigModule } from '@nestjs/config';
+import { AuthModule } from '../src/auth/auth.module';
+import { USER_REPOSITORY } from '../src/auth/common/auth-tokens';
+import { InMemoryUserRepository } from '../src/auth/repositories/in-memory-user.repository';
 
 // Mock @stellar/stellar-sdk at module level — keep original exports
 jest.mock('@stellar/stellar-sdk', () => {
@@ -23,8 +26,17 @@ describe('Auth (e2e)', () => {
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+      imports: [
+        ConfigModule.forRoot({
+          isGlobal: true,
+          load: [() => ({ jwt: { secret: 'test-secret', expiresIn: '1h' } })],
+        }),
+        AuthModule,
+      ],
+    })
+      .overrideProvider(USER_REPOSITORY)
+      .useClass(InMemoryUserRepository)
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
