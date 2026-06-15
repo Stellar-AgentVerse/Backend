@@ -4,7 +4,8 @@ import {
   Query,
   Logger,
 } from '@nestjs/common';
-import { MarketplaceService, MarketplaceItemDto } from './marketplace.service';
+import { MarketplaceService } from './marketplace.service';
+import { MarketplaceItemDto } from './dto/marketplace-item.dto';
 
 @Controller('marketplace')
 export class MarketplaceController {

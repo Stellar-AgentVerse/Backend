@@ -1,25 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like } from 'typeorm';
+import { Repository, Brackets } from 'typeorm';
 import { Asset, AssetMetric, AssetType } from '../database/entities';
-
-export interface MarketplaceItemDto {
-  id: string;
-  title: string;
-  slug: string;
-  category: string;
-  creator: string;
-  creatorPublicKey: string;
-  rating: string;
-  price: string;
-  priceValue: number;
-  currency: string;
-  tag: string;
-  gradient: string;
-  description: string;
-  imageUrl: string;
-  executions: number;
-}
+import { MarketplaceItemDto } from './dto/marketplace-item.dto';
 
 @Injectable()
 export class MarketplaceService {
@@ -36,18 +19,24 @@ export class MarketplaceService {
     const qb = this.assetRepo.createQueryBuilder('a')
       .where('a.status = :status', { status: 'PUBLISHED' });
 
-    if (query) {
-      qb.andWhere('(a.name ILIKE :q OR a.description ILIKE :q)', { q: `%${query}%` });
-    }
     if (type) {
       qb.andWhere('a.type = :type', { type });
     }
+    if (query) {
+      qb.andWhere(
+        new Brackets((qb2) => {
+          qb2.where('a.name ILIKE :q', { q: `%${query}%` })
+            .orWhere('a.description ILIKE :q2', { q2: `%${query}%` });
+        }),
+      );
+    }
 
-    qb.orderBy('a.createdAt', 'DESC')
+    const total = await qb.getCount();
+    const assets = await qb
+      .orderBy('a.createdAt', 'DESC')
       .skip(skip)
-      .take(take);
-
-    const [assets, total] = await qb.getMany();
+      .take(take)
+      .getMany();
     const items = await Promise.all(assets.map((a) => this.toItemDto(a)));
     return { items, total };
   }
