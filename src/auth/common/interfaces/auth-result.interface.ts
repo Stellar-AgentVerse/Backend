@@ -1,6 +1,9 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { User } from '../../models/user.interface';
 
-export interface AuthResult {
+export class AuthResult {
+  @ApiProperty()
   token: string;
+  @ApiProperty({ type: User })
   user: User;
 }
