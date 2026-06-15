@@ -1,8 +1,10 @@
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
-import { setupApp, setupCors, setupHelmet, setupValidation } from './setup';
+import compression from 'compression';
+import { setupApp, setupCompression, setupCors, setupHelmet, setupValidation } from './setup';
 
 jest.mock('helmet', () => jest.fn(() => 'helmet-middleware'));
+jest.mock('compression', () => jest.fn(() => 'compression-middleware'));
 
 describe('setup helpers', () => {
   const createAppMock = () => ({
@@ -44,6 +46,15 @@ describe('setup helpers', () => {
     expect(app.use).toHaveBeenCalledWith('helmet-middleware');
   });
 
+  it('applies compression with a 1kb threshold', () => {
+    const app = createAppMock();
+
+    setupCompression(app as never);
+
+    expect(compression).toHaveBeenCalledWith({ threshold: 1024 });
+    expect(app.use).toHaveBeenCalledWith('compression-middleware');
+  });
+
   it('enables wildcard cors origins directly', () => {
     const app = createAppMock();
 
@@ -53,6 +64,9 @@ describe('setup helpers', () => {
       expect.objectContaining({
         origin: true,
         credentials: true,
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
+        exposedHeaders: ['X-Request-Id'],
+        maxAge: 86400,
       }),
     );
   });
@@ -89,7 +103,9 @@ describe('setup helpers', () => {
 
     expect(app.setGlobalPrefix).toHaveBeenCalledWith('api');
     expect(app.useGlobalPipes).toHaveBeenCalledTimes(1);
-    expect(app.use).toHaveBeenCalledTimes(1);
+    expect(app.use).toHaveBeenCalledTimes(2);
     expect(app.enableCors).toHaveBeenCalledTimes(1);
+    expect(app.use).toHaveBeenNthCalledWith(1, 'compression-middleware');
+    expect(app.use).toHaveBeenNthCalledWith(2, 'helmet-middleware');
   });
 });
