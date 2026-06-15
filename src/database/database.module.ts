@@ -2,9 +2,35 @@ import { Module, Global } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { typeormConfig } from './typeorm.config';
-import { User } from './entities/user.entity';
+import {
+  User,
+  Asset,
+  AssetMetric,
+  AssetCapability,
+  AssetWorkflowStep,
+  AssetSpec,
+  Wallet,
+  CreditPackage,
+  WalletTransaction,
+  ActivityLog,
+  UserAsset,
+  Tag,
+} from './entities';
 
-const entities = [User];
+const entities = [
+  User,
+  Asset,
+  AssetMetric,
+  AssetCapability,
+  AssetWorkflowStep,
+  AssetSpec,
+  Wallet,
+  CreditPackage,
+  WalletTransaction,
+  ActivityLog,
+  UserAsset,
+  Tag,
+];
 
 @Global()
 @Module({
