@@ -11,6 +11,7 @@ import { AssetsModule } from './assets/assets.module';
 import { WalletModule } from './wallet/wallet.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     WalletModule,
     MarketplaceModule,
     DashboardModule,
+    HealthModule,
   ],
   controllers: [],
   providers: [],
