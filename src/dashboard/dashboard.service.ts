@@ -2,33 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Asset, AssetMetric, ActivityLog } from '../database/entities';
-
-export interface DashboardMetricsDto {
-  totalRevenue: number;
-  assetsPublished: number;
-  totalExecutions: number;
-  reliability: string;
-  revenueTrend: string;
-  pendingVerification: number;
-}
-
-export interface TopAssetDto {
-  name: string;
-  category: string;
-  revenue: string;
-  calls: string;
-  gradient: string;
-  assetId: string;
-}
-
-export interface ActivityLogDto {
-  event: string;
-  asset: string;
-  status: string;
-  statusClass: string;
-  revenue: string;
-  time: string;
-}
+import { DashboardMetricsDto } from './dto/dashboard-metrics.dto';
+import { TopAssetDto } from './dto/top-asset.dto';
+import { ActivityLogDto } from './dto/activity-log.dto';
 
 @Injectable()
 export class DashboardService {

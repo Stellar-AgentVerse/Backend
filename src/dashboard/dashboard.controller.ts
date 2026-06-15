@@ -6,10 +6,10 @@ import {
 } from '@nestjs/common';
 import {
   DashboardService,
-  DashboardMetricsDto,
-  TopAssetDto,
-  ActivityLogDto,
 } from './dashboard.service';
+import { DashboardMetricsDto } from './dto/dashboard-metrics.dto';
+import { TopAssetDto } from './dto/top-asset.dto';
+import { ActivityLogDto } from './dto/activity-log.dto';
 
 @Controller('dashboard')
 export class DashboardController {
