@@ -7,12 +7,13 @@ import { DataSource } from 'typeorm';
 import { seedDatabase } from './database/seed';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   setupApp(app, { allowedOrigins: getValidatedEnv().corsOrigins });
   app.useGlobalFilters(new HttpExceptionFilter());
-  app.useGlobalInterceptors(new RequestLoggingInterceptor());
+  app.useGlobalInterceptors(new RequestLoggingInterceptor(), new ResponseInterceptor());
   setupSwagger(app);
 
   // Seed database on first run
