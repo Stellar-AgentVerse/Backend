@@ -58,8 +58,8 @@ export class AuthService {
     }
 
     // Upsert user
-    const user = this.userRepository.findOrCreate(publicKey);
-    this.userRepository.updateLastLogin(publicKey);
+    const user = await this.userRepository.findOrCreate(publicKey);
+    await this.userRepository.updateLastLogin(publicKey);
 
     // Sign JWT
     const token = this.jwtService.sign({

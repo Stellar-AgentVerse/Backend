@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit, Inject } from '@nestjs/common';
-import { ConfigType } from '@nestjs/config';
+import type { ConfigType } from '@nestjs/config';
 import { sorobanConfig } from './config/soroban.config';
 import * as StellarSdk from '@stellar/stellar-sdk';
 

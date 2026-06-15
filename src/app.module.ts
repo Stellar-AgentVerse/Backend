@@ -5,6 +5,8 @@ import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { sorobanConfig } from './tokens/config/soroban.config';
 import { jwtConfig } from './config/jwt.config';
+import { DatabaseModule } from './database/database.module';
+import { IndexerModule } from './indexer/indexer.module';
 
 @Module({
   imports: [
@@ -12,9 +14,11 @@ import { jwtConfig } from './config/jwt.config';
       isGlobal: true,
       load: [sorobanConfig, jwtConfig]
     }),
+    DatabaseModule,
     PaymentsModule,
     TokensModule,
     AuthModule,
+    IndexerModule,
   ],
   controllers: [],
   providers: [],

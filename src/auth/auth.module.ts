@@ -7,8 +7,8 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { InMemoryChallengeStore } from './stores/in-memory-challenge.store';
-import { InMemoryUserRepository } from './repositories/in-memory-user.repository';
 import { CHALLENGE_STORE, USER_REPOSITORY } from './common/auth-tokens';
+import { TypeOrmUserRepository } from '../database/repositories';
 
 @Module({
   imports: [
@@ -35,7 +35,7 @@ import { CHALLENGE_STORE, USER_REPOSITORY } from './common/auth-tokens';
     },
     {
       provide: USER_REPOSITORY,
-      useClass: InMemoryUserRepository,
+      useClass: TypeOrmUserRepository,
     },
   ],
   exports: [JwtAuthGuard, JwtModule],

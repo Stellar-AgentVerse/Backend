@@ -7,7 +7,7 @@ import { UserRepository } from './user-repository.interface';
 export class InMemoryUserRepository implements UserRepository {
   private readonly store = new Map<string, User>();
 
-  findOrCreate(publicKey: string): User {
+  async findOrCreate(publicKey: string): Promise<User> {
     const existing = this.store.get(publicKey);
     if (existing) {
       return existing;
@@ -17,11 +17,11 @@ export class InMemoryUserRepository implements UserRepository {
     return user;
   }
 
-  findByPublicKey(publicKey: string): User | null {
+  async findByPublicKey(publicKey: string): Promise<User | null> {
     return this.store.get(publicKey) ?? null;
   }
 
-  updateLastLogin(publicKey: string): User | null {
+  async updateLastLogin(publicKey: string): Promise<User | null> {
     const user = this.store.get(publicKey);
     if (!user) {
       return null;
