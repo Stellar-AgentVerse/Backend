@@ -5,3 +5,6 @@ export { AssetMetric } from './asset-metric.entity';
 export { AssetCapability } from './asset-capability.entity';
 export { AssetWorkflowStep } from './asset-workflow-step.entity';
 export { AssetSpec } from './asset-spec.entity';
+export { Wallet } from './wallet.entity';
+export { CreditPackage } from './credit-package.entity';
+export { WalletTransaction, TransactionType } from './wallet-transaction.entity';
