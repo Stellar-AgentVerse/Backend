@@ -3,6 +3,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { TokensModule } from './tokens/tokens.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
+import { typeormConfig } from './database/typeorm.config';
 import { sorobanConfig } from './tokens/config/soroban.config';
 import { jwtConfig } from './config/jwt.config';
 import { DatabaseModule } from './database/database.module';
@@ -12,12 +13,14 @@ import { WalletModule } from './wallet/wallet.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { HealthModule } from './health/health.module';
+import { validateEnv } from './config/env.validation';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [sorobanConfig, jwtConfig]
+      load: [typeormConfig, sorobanConfig, jwtConfig],
+      validate: validateEnv,
     }),
     DatabaseModule,
     PaymentsModule,
