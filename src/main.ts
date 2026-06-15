@@ -1,12 +1,14 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { setupApp } from './config';
+import { setupSwagger } from './config/swagger';
 import { DataSource } from 'typeorm';
 import { seedDatabase } from './database/seed';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   setupApp(app);
+  setupSwagger(app);
 
   // Seed database on first run
   try {
