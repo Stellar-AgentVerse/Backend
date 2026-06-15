@@ -14,6 +14,8 @@ import { MarketplaceModule } from './marketplace/marketplace.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { HealthModule } from './health/health.module';
 import { validateEnv } from './config/env.validation';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule, seconds } from '@nestjs/throttler';
 
 @Module({
   imports: [
@@ -22,6 +24,12 @@ import { validateEnv } from './config/env.validation';
       load: [typeormConfig, sorobanConfig, jwtConfig],
       validate: validateEnv,
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: seconds(60),
+        limit: 100,
+      },
+    ]),
     DatabaseModule,
     PaymentsModule,
     TokensModule,
@@ -34,6 +42,11 @@ import { validateEnv } from './config/env.validation';
     HealthModule,
   ],
   controllers: [],
-  providers: [],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}
