@@ -1,22 +1,27 @@
 import {
   Entity,
-  PrimaryGeneratedColumn,
+  PrimaryColumn,
   Column,
   CreateDateColumn,
-  UpdateDateColumn,
 } from 'typeorm';
 
 @Entity('users')
 export class User {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryColumn({ type: 'varchar', length: 56 })
+  publicKey: string;
 
-  @Column({ type: 'varchar', unique: true, length: 56 })
-  wallet: string;
+  @Column({ type: 'varchar', length: 20, default: 'ACTIVE' })
+  status: string;
+
+  @Column({ type: 'varchar', length: 100, default: '' })
+  displayName: string;
+
+  @Column({ type: 'varchar', length: 500, default: '' })
+  avatar: string;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'timestamptz' })
-  updatedAt: Date;
+  @Column({ type: 'timestamptz' })
+  lastLoginAt: Date;
 }
