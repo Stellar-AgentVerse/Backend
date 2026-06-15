@@ -1,5 +1,4 @@
 import { Injectable, Logger, OnModuleInit, Inject } from '@nestjs/common';
-import type { ConfigType } from '@nestjs/config';
 import { sorobanConfig } from './config/soroban.config';
 import * as StellarSdk from '@stellar/stellar-sdk';
 
@@ -11,7 +10,13 @@ export class TokensService implements OnModuleInit {
 
   constructor(
     @Inject(sorobanConfig.KEY)
-    private config: ConfigType<typeof sorobanConfig>,
+    private config: {
+      network: string;
+      rpcUrl: string;
+      networkPassphrase: string;
+      contracts: { tokenMint: string; tokenSale: string };
+      adminSecretKey: string;
+    },
   ) {}
 
   onModuleInit() {

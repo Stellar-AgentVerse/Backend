@@ -9,8 +9,8 @@ describe('InMemoryUserRepository', () => {
   });
 
   describe('findOrCreate', () => {
-    it('should create a new user when publicKey does not exist', () => {
-      const user = repository.findOrCreate('GBSHARK...');
+    it('should create a new user when publicKey does not exist', async () => {
+      const user = await repository.findOrCreate('GBSHARK...');
 
       expect(user.publicKey).toBe('GBSHARK...');
       expect(user.status).toBe(UserStatus.ACTIVE);
@@ -20,9 +20,9 @@ describe('InMemoryUserRepository', () => {
       expect(user.lastLoginAt).toBeInstanceOf(Date);
     });
 
-    it('should return existing user when publicKey already exists', () => {
-      const firstCall = repository.findOrCreate('GBSHARK...');
-      const secondCall = repository.findOrCreate('GBSHARK...');
+    it('should return existing user when publicKey already exists', async () => {
+      const firstCall = await repository.findOrCreate('GBSHARK...');
+      const secondCall = await repository.findOrCreate('GBSHARK...');
 
       expect(secondCall).toBe(firstCall);
       expect(secondCall.publicKey).toBe('GBSHARK...');
@@ -30,14 +30,14 @@ describe('InMemoryUserRepository', () => {
   });
 
   describe('findByPublicKey', () => {
-    it('should return null when user does not exist', () => {
-      const result = repository.findByPublicKey('UNKNOWN_KEY');
+    it('should return null when user does not exist', async () => {
+      const result = await repository.findByPublicKey('UNKNOWN_KEY');
       expect(result).toBeNull();
     });
 
-    it('should return the user when they exist', () => {
-      repository.findOrCreate('GBSHARK...');
-      const result = repository.findByPublicKey('GBSHARK...');
+    it('should return the user when they exist', async () => {
+      await repository.findOrCreate('GBSHARK...');
+      const result = await repository.findByPublicKey('GBSHARK...');
 
       expect(result).not.toBeNull();
       expect(result!.publicKey).toBe('GBSHARK...');
@@ -46,21 +46,21 @@ describe('InMemoryUserRepository', () => {
 
   describe('updateLastLogin', () => {
     it('should update lastLoginAt and return the updated user', async () => {
-      repository.findOrCreate('GBSHARK...');
-      const originalLastLogin = repository.findByPublicKey('GBSHARK...')!.lastLoginAt;
+      await repository.findOrCreate('GBSHARK...');
+      const originalLastLogin = (await repository.findByPublicKey('GBSHARK...'))!.lastLoginAt;
 
       // Wait a small amount to ensure time difference
       await new Promise((r) => setTimeout(r, 5));
 
-      const updated = repository.updateLastLogin('GBSHARK...');
+      const updated = await repository.updateLastLogin('GBSHARK...');
 
       expect(updated).not.toBeNull();
       expect(updated!.lastLoginAt.getTime()).toBeGreaterThan(originalLastLogin.getTime());
       expect(updated!.publicKey).toBe('GBSHARK...');
     });
 
-    it('should return null when user does not exist', () => {
-      const result = repository.updateLastLogin('UNKNOWN_KEY');
+    it('should return null when user does not exist', async () => {
+      const result = await repository.updateLastLogin('UNKNOWN_KEY');
       expect(result).toBeNull();
     });
   });

@@ -162,8 +162,8 @@ describe('AuthService', () => {
         createdAt: new Date(),
         lastLoginAt: new Date(),
       };
-      userRepository.findOrCreate.mockReturnValue(mockUser);
-      userRepository.updateLastLogin.mockReturnValue(mockUser);
+      userRepository.findOrCreate.mockResolvedValue(mockUser);
+      userRepository.updateLastLogin.mockResolvedValue(mockUser);
       jwtService.sign.mockReturnValue('signed-jwt-token');
 
       const result = await service.verifyWallet(publicKey, signature);
@@ -191,7 +191,7 @@ describe('AuthService', () => {
       };
       (Keypair.fromPublicKey as jest.Mock).mockReturnValue(mockKeypair);
 
-      userRepository.findOrCreate.mockReturnValue({
+      userRepository.findOrCreate.mockResolvedValue({
         publicKey,
         status: UserStatus.ACTIVE,
         displayName: '',
@@ -199,7 +199,7 @@ describe('AuthService', () => {
         createdAt: new Date(),
         lastLoginAt: new Date(),
       });
-      userRepository.updateLastLogin.mockReturnValue({
+      userRepository.updateLastLogin.mockResolvedValue({
         publicKey,
         status: UserStatus.ACTIVE,
         displayName: '',

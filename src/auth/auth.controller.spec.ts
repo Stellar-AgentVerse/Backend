@@ -13,6 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import { CHALLENGE_STORE, USER_REPOSITORY } from './common/auth-tokens';
 import type { ChallengeStore } from './stores/challenge-store.interface';
 import type { UserRepository } from './repositories/user-repository.interface';
+import { InMemoryUserRepository } from './repositories/in-memory-user.repository';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 // Mock @stellar/stellar-sdk at module level
@@ -50,7 +51,10 @@ describe('AuthController (integration)', () => {
         AuthModule,
       ],
       controllers: [TestProtectedController],
-    }).compile();
+    })
+      .overrideProvider(USER_REPOSITORY)
+      .useClass(InMemoryUserRepository)
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
