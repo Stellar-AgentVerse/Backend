@@ -2,8 +2,8 @@ import { Injectable, Inject, UnauthorizedException, Logger } from '@nestjs/commo
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'node:crypto';
 import { Keypair } from '@stellar/stellar-sdk';
-import { ChallengeStore } from './stores/challenge-store.interface';
-import { UserRepository } from './repositories/user-repository.interface';
+import type { ChallengeStore } from './stores/challenge-store.interface';
+import type { UserRepository } from './repositories/user-repository.interface';
 import { CHALLENGE_STORE, USER_REPOSITORY } from './common/auth-tokens';
 import { AuthResult } from './common/interfaces/auth-result.interface';
 

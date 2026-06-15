@@ -1,13 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  INestApplication,
+  ValidationPipe,
+  Controller,
+  Get,
+  UseGuards,
+} from '@nestjs/common';
 import request from 'supertest';
-import { App } from 'supertest/types';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth.module';
-import { JwtModule } from '@nestjs/jwt';
+import { JwtService } from '@nestjs/jwt';
 import { CHALLENGE_STORE, USER_REPOSITORY } from './common/auth-tokens';
-import { ChallengeStore } from './stores/challenge-store.interface';
-import { UserRepository } from './repositories/user-repository.interface';
+import type { ChallengeStore } from './stores/challenge-store.interface';
+import type { UserRepository } from './repositories/user-repository.interface';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 // Mock @stellar/stellar-sdk at module level
 jest.mock('@stellar/stellar-sdk', () => ({
@@ -18,20 +24,32 @@ jest.mock('@stellar/stellar-sdk', () => ({
 
 import { Keypair } from '@stellar/stellar-sdk';
 
+// Test controller with a protected route
+@Controller('test')
+class TestProtectedController {
+  @Get('protected')
+  @UseGuards(JwtAuthGuard)
+  getProtected(): { status: string } {
+    return { status: 'ok' };
+  }
+}
+
 describe('AuthController (integration)', () => {
   let app: INestApplication;
   let challengeStore: ChallengeStore;
   let userRepository: UserRepository;
+  let jwtService: JwtService;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
           isGlobal: true,
-          load: [],
+          load: [() => ({ jwt: { secret: 'test-secret', expiresIn: '1h' } })],
         }),
         AuthModule,
       ],
+      controllers: [TestProtectedController],
     }).compile();
 
     app = moduleFixture.createNestApplication();
@@ -46,6 +64,7 @@ describe('AuthController (integration)', () => {
 
     challengeStore = moduleFixture.get<ChallengeStore>(CHALLENGE_STORE);
     userRepository = moduleFixture.get<UserRepository>(USER_REPOSITORY);
+    jwtService = moduleFixture.get<JwtService>(JwtService);
 
     await app.init();
   });
@@ -146,6 +165,33 @@ describe('AuthController (integration)', () => {
       await request(app.getHttpServer())
         .post('/api/auth/wallet')
         .send({ publicKey: pk, signature: invalidSignature })
+        .expect(401);
+    });
+  });
+
+  describe('JWT validation (REQ-03)', () => {
+    it('should allow access to protected route with valid token', async () => {
+      const token = jwtService.sign({ publicKey: 'GBPROTECT...' });
+
+      await request(app.getHttpServer())
+        .get('/api/test/protected')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toEqual({ status: 'ok' });
+        });
+    });
+
+    it('should return 401 when no token is provided', () => {
+      return request(app.getHttpServer())
+        .get('/api/test/protected')
+        .expect(401);
+    });
+
+    it('should return 401 with malformed token', () => {
+      return request(app.getHttpServer())
+        .get('/api/test/protected')
+        .set('Authorization', 'Bearer invalid-token-here')
         .expect(401);
     });
   });

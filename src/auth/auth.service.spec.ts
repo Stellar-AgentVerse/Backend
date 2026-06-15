@@ -1,8 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
-import { ChallengeStore } from './stores/challenge-store.interface';
-import { UserRepository } from './repositories/user-repository.interface';
+import type { ChallengeStore } from './stores/challenge-store.interface';
+import type { UserRepository } from './repositories/user-repository.interface';
+import { UserStatus } from './models/user.interface';
 import { CHALLENGE_STORE, USER_REPOSITORY } from './common/auth-tokens';
 import { UnauthorizedException } from '@nestjs/common';
 
@@ -155,7 +156,7 @@ describe('AuthService', () => {
 
       const mockUser = {
         publicKey,
-        status: 'ACTIVE',
+        status: UserStatus.ACTIVE,
         displayName: '',
         avatar: '',
         createdAt: new Date(),
@@ -192,7 +193,7 @@ describe('AuthService', () => {
 
       userRepository.findOrCreate.mockReturnValue({
         publicKey,
-        status: 'ACTIVE',
+        status: UserStatus.ACTIVE,
         displayName: '',
         avatar: '',
         createdAt: new Date(),
@@ -200,7 +201,7 @@ describe('AuthService', () => {
       });
       userRepository.updateLastLogin.mockReturnValue({
         publicKey,
-        status: 'ACTIVE',
+        status: UserStatus.ACTIVE,
         displayName: '',
         avatar: '',
         createdAt: new Date(),

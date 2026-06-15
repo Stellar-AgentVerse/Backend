@@ -19,7 +19,7 @@ import { CHALLENGE_STORE, USER_REPOSITORY } from './common/auth-tokens';
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('jwt.secret') || 'dev-secret',
         signOptions: {
-          expiresIn: configService.get<string>('jwt.expiresIn') || '24h',
+          expiresIn: (configService.get<string>('jwt.expiresIn') || '24h') as `${number}${'s' | 'm' | 'h' | 'd'}`,
         },
       }),
     }),
