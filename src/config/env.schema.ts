@@ -53,10 +53,12 @@ export const DEV_DEFAULTS = {
     network: 'testnet',
     rpcUrl: 'https://soroban-testnet.stellar.org',
     networkPassphrase: 'Test SDF Network ; September 2015',
+    // Soroban contract ids must be valid C... addresses; required in production.
     contracts: {
       tokenMint: '',
       tokenSale: '',
     },
+    // Admin secret must be a valid S... seed; used to sign all token operations. Required in production.
     adminSecretKey: '',
   },
   corsOrigins: ['*'],

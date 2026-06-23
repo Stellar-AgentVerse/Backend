@@ -1,123 +1,96 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import * as StellarSdk from '@stellar/stellar-sdk';
+import { Keypair, StrKey } from '@stellar/stellar-sdk';
 import { sorobanConfig } from './config/soroban.config';
+import { SorobanTxService } from './soroban-tx.service';
 import { TokensService } from './tokens.service';
 
-jest.mock('@stellar/stellar-sdk', () => ({
-  rpc: {
-    Server: jest.fn(),
-  },
-}));
+const VALID_CONTRACT_ID = StrKey.encodeContract(Buffer.alloc(32, 1));
+const RECIPIENT = Keypair.random().publicKey();
 
 describe('TokensService', () => {
   let service: TokensService;
-  const rpcServerMock = StellarSdk.rpc.Server as jest.Mock;
+  let invokeContract: jest.Mock;
 
-  beforeEach(async () => {
-    rpcServerMock.mockClear();
+  async function buildService(contracts: { tokenMint: string; tokenSale: string }) {
+    invokeContract = jest.fn().mockResolvedValue({ hash: 'TXHASH', status: 'SUCCESS' });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TokensService,
         {
           provide: sorobanConfig.KEY,
-          useValue: {
-            network: 'testnet',
-            rpcUrl: 'https://rpc.test',
-            networkPassphrase: 'Test Network',
-            contracts: {
-              tokenMint: 'mint-contract',
-              tokenSale: 'sale-contract',
-            },
-            adminSecretKey: 'SSECRET',
-          },
+          useValue: { contracts },
+        },
+        {
+          provide: SorobanTxService,
+          useValue: { invokeContract },
         },
       ],
     }).compile();
 
-    service = module.get(TokensService);
+    return module.get(TokensService);
+  }
+
+  beforeEach(async () => {
+    service = await buildService({
+      tokenMint: VALID_CONTRACT_ID,
+      tokenSale: VALID_CONTRACT_ID,
+    });
   });
 
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  it('initializes the Stellar RPC server on module init', () => {
-    service.onModuleInit();
+  it('mints tokens via an admin-signed contract invocation', async () => {
+    const result = await service.mintTokens(RECIPIENT, '100');
 
-    expect(rpcServerMock).toHaveBeenCalledWith('https://rpc.test');
-    expect((service as any).rpc).toBeDefined();
-    expect((service as any).networkPassphrase).toBe('Test Network');
-  });
-
-  it('returns an error when mint contract id is missing', async () => {
-    const module = await Test.createTestingModule({
-      providers: [
-        TokensService,
-        {
-          provide: sorobanConfig.KEY,
-          useValue: {
-            network: 'testnet',
-            rpcUrl: 'https://rpc.test',
-            networkPassphrase: 'Test Network',
-            contracts: { tokenMint: '', tokenSale: 'sale-contract' },
-            adminSecretKey: 'SSECRET',
-          },
-        },
-      ],
-    }).compile();
-    const missingMintService = module.get(TokensService);
-
-    await expect(missingMintService.mintTokens('GDEST', '100')).resolves.toEqual({
-      error: 'Contract ID not configured',
-    });
-  });
-
-  it('simulates mint success when contract id is configured', async () => {
-    service.onModuleInit();
-
-    await expect(service.mintTokens('GDEST', '100')).resolves.toEqual({
-      status: 'simulated_success',
-      contractId: 'mint-contract',
+    expect(invokeContract).toHaveBeenCalledWith(
+      expect.objectContaining({ contractId: VALID_CONTRACT_ID, method: 'mint' }),
+    );
+    expect(invokeContract.mock.calls[0][0].args).toHaveLength(2);
+    expect(result).toEqual({
+      hash: 'TXHASH',
+      status: 'SUCCESS',
       operation: 'mint',
-      to: 'GDEST',
+      to: RECIPIENT,
       amount: '100',
     });
   });
 
-  it('returns an error when sell contract id is missing', async () => {
-    const module = await Test.createTestingModule({
-      providers: [
-        TokensService,
-        {
-          provide: sorobanConfig.KEY,
-          useValue: {
-            network: 'testnet',
-            rpcUrl: 'https://rpc.test',
-            networkPassphrase: 'Test Network',
-            contracts: { tokenMint: 'mint-contract', tokenSale: 'PLACEHOLDER_SALE' },
-            adminSecretKey: 'SSECRET',
-          },
-        },
-      ],
-    }).compile();
-    const missingSaleService = module.get(TokensService);
+  it('sells tokens via an admin-signed contract invocation', async () => {
+    const result = await service.sellTokens(RECIPIENT, '10', '2');
 
-    await expect(missingSaleService.sellTokens('GSELLER', '10', '2')).resolves.toEqual({
-      error: 'Contract ID not configured',
-    });
-  });
-
-  it('simulates sell success when contract id is configured', async () => {
-    service.onModuleInit();
-
-    await expect(service.sellTokens('GSELLER', '10', '2')).resolves.toEqual({
-      status: 'simulated_success',
-      contractId: 'sale-contract',
+    expect(invokeContract).toHaveBeenCalledWith(
+      expect.objectContaining({ contractId: VALID_CONTRACT_ID, method: 'sell' }),
+    );
+    expect(invokeContract.mock.calls[0][0].args).toHaveLength(3);
+    expect(result).toEqual({
+      hash: 'TXHASH',
+      status: 'SUCCESS',
       operation: 'sell',
-      seller: 'GSELLER',
+      seller: RECIPIENT,
       amount: '10',
       price: '2',
     });
+  });
+
+  it('rejects mint when the mint contract id is not configured', async () => {
+    const unconfigured = await buildService({ tokenMint: '', tokenSale: VALID_CONTRACT_ID });
+
+    await expect(unconfigured.mintTokens(RECIPIENT, '100')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(invokeContract).not.toHaveBeenCalled();
+  });
+
+  it('rejects sell when the sale contract id is invalid', async () => {
+    const unconfigured = await buildService({ tokenMint: VALID_CONTRACT_ID, tokenSale: 'PLACEHOLDER' });
+
+    await expect(unconfigured.sellTokens(RECIPIENT, '10', '2')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(invokeContract).not.toHaveBeenCalled();
   });
 });
