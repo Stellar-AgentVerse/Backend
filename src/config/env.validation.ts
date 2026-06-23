@@ -1,3 +1,4 @@
+import { StrKey } from '@stellar/stellar-sdk';
 import { AppEnv, DEV_DEFAULTS } from './env.schema';
 
 let validatedEnvCache: AppEnv | null = null;
@@ -5,7 +6,14 @@ let validatedEnvCache: AppEnv | null = null;
 const REQUIRED_IN_PRODUCTION = {
   db: ['DB_HOST', 'DB_PORT', 'DB_USERNAME', 'DB_PASSWORD', 'DB_NAME'] as const,
   jwt: ['JWT_SECRET'] as const,
-  stellar: ['STELLAR_NETWORK', 'STELLAR_RPC_URL', 'STELLAR_NETWORK_PASSPHRASE'] as const,
+  stellar: [
+    'STELLAR_NETWORK',
+    'STELLAR_RPC_URL',
+    'STELLAR_NETWORK_PASSPHRASE',
+    'SOROBAN_TOKEN_MINT_CONTRACT_ID',
+    'SOROBAN_TOKEN_SALE_CONTRACT_ID',
+    'STELLAR_ADMIN_SECRET_KEY',
+  ] as const,
   cors: ['CORS_ORIGINS'] as const,
 };
 
@@ -80,6 +88,34 @@ function ensureProductionRequirement(env: NodeJS.ProcessEnv, key: string) {
   }
 }
 
+function parseContractId(value: string | undefined, key: string, fallback: string): string {
+  const raw = value?.trim();
+
+  if (raw === undefined || raw === '') {
+    return fallback;
+  }
+
+  if (!StrKey.isValidContract(raw)) {
+    throw new Error(`${key} must be a valid Soroban contract id (C...)`);
+  }
+
+  return raw;
+}
+
+function parseAdminSecretKey(value: string | undefined, fallback: string): string {
+  const raw = value?.trim();
+
+  if (raw === undefined || raw === '') {
+    return fallback;
+  }
+
+  if (!StrKey.isValidEd25519SecretSeed(raw)) {
+    throw new Error('STELLAR_ADMIN_SECRET_KEY must be a valid Stellar secret seed (S...)');
+  }
+
+  return raw;
+}
+
 export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
   const isProduction = env.NODE_ENV === 'production';
 
@@ -117,10 +153,21 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
       rpcUrl: env.STELLAR_RPC_URL ?? DEV_DEFAULTS.stellar.rpcUrl,
       networkPassphrase: env.STELLAR_NETWORK_PASSPHRASE ?? DEV_DEFAULTS.stellar.networkPassphrase,
       contracts: {
-        tokenMint: env.SOROBAN_TOKEN_MINT_CONTRACT_ID ?? DEV_DEFAULTS.stellar.contracts.tokenMint,
-        tokenSale: env.SOROBAN_TOKEN_SALE_CONTRACT_ID ?? DEV_DEFAULTS.stellar.contracts.tokenSale,
+        tokenMint: parseContractId(
+          env.SOROBAN_TOKEN_MINT_CONTRACT_ID,
+          'SOROBAN_TOKEN_MINT_CONTRACT_ID',
+          DEV_DEFAULTS.stellar.contracts.tokenMint,
+        ),
+        tokenSale: parseContractId(
+          env.SOROBAN_TOKEN_SALE_CONTRACT_ID,
+          'SOROBAN_TOKEN_SALE_CONTRACT_ID',
+          DEV_DEFAULTS.stellar.contracts.tokenSale,
+        ),
       },
-      adminSecretKey: env.STELLAR_ADMIN_SECRET_KEY ?? DEV_DEFAULTS.stellar.adminSecretKey,
+      adminSecretKey: parseAdminSecretKey(
+        env.STELLAR_ADMIN_SECRET_KEY,
+        DEV_DEFAULTS.stellar.adminSecretKey,
+      ),
     },
     corsOrigins: parseCorsOrigins(env.CORS_ORIGINS, !isProduction),
   };
