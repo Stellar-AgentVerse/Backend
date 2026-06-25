@@ -48,7 +48,7 @@ describe('TokensService', () => {
     mockRpcInstance = {
       getAccount: jest.fn().mockResolvedValue({}),
       simulateTransaction: jest.fn().mockResolvedValue({ result: { retval: 'mock-retval' } }),
-      sendTransaction: jest.fn().mockResolvedValue({ hash: 'TXHASH123' }),
+      sendTransaction: jest.fn().mockResolvedValue({ status: 'PENDING', hash: 'TXHASH123' }),
       getTransaction: jest.fn().mockResolvedValue({ status: 'SUCCESS' }),
     };
 
@@ -185,6 +185,24 @@ describe('TokensService', () => {
       const result = await service.mintTokens('GDEST', '100');
 
       expect(result).toEqual({ error: 'mintTokens failed', details: 'RPC unavailable' });
+    });
+
+    it('returns error immediately when sendTransaction status is ERROR', async () => {
+      mockRpcInstance.sendTransaction.mockResolvedValueOnce({ status: 'ERROR', hash: 'TXHASH123' });
+
+      const result = await service.mintTokens('GDEST', '100');
+
+      expect(mockRpcInstance.getTransaction).not.toHaveBeenCalled();
+      expect(result).toEqual({ error: 'mintTokens failed', details: 'sendTransaction failed: ERROR' });
+    });
+
+    it('returns error immediately when sendTransaction status is TRY_AGAIN_LATER', async () => {
+      mockRpcInstance.sendTransaction.mockResolvedValueOnce({ status: 'TRY_AGAIN_LATER', hash: 'TXHASH123' });
+
+      const result = await service.mintTokens('GDEST', '100');
+
+      expect(mockRpcInstance.getTransaction).not.toHaveBeenCalled();
+      expect(result).toEqual({ error: 'mintTokens failed', details: 'sendTransaction failed: TRY_AGAIN_LATER' });
     });
 
     it('returns error when amount is not a valid integer string', async () => {

@@ -65,8 +65,11 @@ export class TokensService implements OnModuleInit {
     const simResult = await this.rpc.simulateTransaction(tx);
     const assembled = StellarSdk.rpc.assembleTransaction(tx, simResult).build();
     assembled.sign(adminKeypair);
-    const { hash } = await this.rpc.sendTransaction(assembled);
-    return this.awaitTransaction(hash);
+    const sendResponse = await this.rpc.sendTransaction(assembled);
+    if (sendResponse.status === 'ERROR' || sendResponse.status === 'TRY_AGAIN_LATER') {
+      throw new Error(`sendTransaction failed: ${sendResponse.status}`);
+    }
+    return this.awaitTransaction(sendResponse.hash);
   }
 
   async mintTokens(to: string, amount: string) {
