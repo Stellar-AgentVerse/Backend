@@ -5,7 +5,14 @@ let validatedEnvCache: AppEnv | null = null;
 const REQUIRED_IN_PRODUCTION = {
   db: ['DB_HOST', 'DB_PORT', 'DB_USERNAME', 'DB_PASSWORD', 'DB_NAME'] as const,
   jwt: ['JWT_SECRET'] as const,
-  stellar: ['STELLAR_NETWORK', 'STELLAR_RPC_URL', 'STELLAR_NETWORK_PASSPHRASE'] as const,
+  stellar: [
+    'STELLAR_NETWORK',
+    'STELLAR_RPC_URL',
+    'STELLAR_NETWORK_PASSPHRASE',
+    'SOROBAN_TOKEN_MINT_CONTRACT_ID',
+    'SOROBAN_TOKEN_SALE_CONTRACT_ID',
+    'STELLAR_ADMIN_SECRET_KEY',
+  ] as const,
   cors: ['CORS_ORIGINS'] as const,
 };
 
