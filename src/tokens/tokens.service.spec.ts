@@ -19,6 +19,7 @@ jest.mock('@stellar/stellar-sdk', () => ({
   Address: {
     fromString: jest.fn(),
   },
+  xdr: {},
 }));
 
 describe('TokensService', () => {
@@ -30,7 +31,7 @@ describe('TokensService', () => {
     getTransaction: jest.Mock;
   };
   let mockContractInstance: { call: jest.Mock };
-  let mockKeypair: { publicKey: jest.Mock };
+  let mockKeypair: { publicKey: jest.Mock; sign: jest.Mock };
   let mockTx: { sign: jest.Mock };
 
   const defaultConfig = {
@@ -44,16 +45,27 @@ describe('TokensService', () => {
   beforeEach(async () => {
     mockTx = { sign: jest.fn() };
     mockContractInstance = { call: jest.fn().mockReturnValue('mock-op') };
-    mockKeypair = { publicKey: jest.fn().mockReturnValue('GADMIN...') };
+    mockKeypair = {
+      publicKey: jest.fn().mockReturnValue('GADMIN...'),
+      sign: jest.fn(),
+    };
     mockRpcInstance = {
       getAccount: jest.fn().mockResolvedValue({}),
-      simulateTransaction: jest.fn().mockResolvedValue({ result: { retval: 'mock-retval' } }),
-      sendTransaction: jest.fn().mockResolvedValue({ status: 'PENDING', hash: 'TXHASH123' }),
+      simulateTransaction: jest
+        .fn()
+        .mockResolvedValue({ result: { retval: 'mock-retval' } }),
+      sendTransaction: jest
+        .fn()
+        .mockResolvedValue({ status: 'PENDING', hash: 'TXHASH123' }),
       getTransaction: jest.fn().mockResolvedValue({ status: 'SUCCESS' }),
     };
 
-    (StellarSdk.rpc.Server as jest.Mock).mockImplementation(() => mockRpcInstance);
-    (StellarSdk.Contract as jest.Mock).mockImplementation(() => mockContractInstance);
+    (StellarSdk.rpc.Server as jest.Mock).mockImplementation(
+      () => mockRpcInstance,
+    );
+    (StellarSdk.Contract as jest.Mock).mockImplementation(
+      () => mockContractInstance,
+    );
     (StellarSdk.TransactionBuilder as jest.Mock).mockImplementation(() => ({
       addOperation: jest.fn().mockReturnThis(),
       setTimeout: jest.fn().mockReturnThis(),
@@ -98,7 +110,10 @@ describe('TokensService', () => {
           TokensService,
           {
             provide: sorobanConfig.KEY,
-            useValue: { ...defaultConfig, contracts: { tokenMint: '', tokenSale: 'sale-contract' } },
+            useValue: {
+              ...defaultConfig,
+              contracts: { tokenMint: '', tokenSale: 'sale-contract' },
+            },
           },
         ],
       }).compile();
@@ -115,12 +130,15 @@ describe('TokensService', () => {
       expect(StellarSdk.Keypair.fromSecret).toHaveBeenCalledWith('SSECRET');
       expect(mockRpcInstance.getAccount).toHaveBeenCalledWith('GADMIN...');
       expect(StellarSdk.Contract).toHaveBeenCalledWith('mint-contract');
-      expect(mockContractInstance.call).toHaveBeenCalledWith('mint', 'mock-scval', 'mock-i128');
-      expect(mockRpcInstance.simulateTransaction).toHaveBeenCalledWith(mockTx);
-      expect(StellarSdk.rpc.assembleTransaction).toHaveBeenCalledWith(
-        mockTx,
-        { result: { retval: 'mock-retval' } },
+      expect(mockContractInstance.call).toHaveBeenCalledWith(
+        'mint',
+        'mock-scval',
+        'mock-i128',
       );
+      expect(mockRpcInstance.simulateTransaction).toHaveBeenCalledWith(mockTx);
+      expect(StellarSdk.rpc.assembleTransaction).toHaveBeenCalledWith(mockTx, {
+        result: { retval: 'mock-retval' },
+      });
       expect(mockTx.sign).toHaveBeenCalledWith(mockKeypair);
       expect(mockRpcInstance.sendTransaction).toHaveBeenCalledWith(mockTx);
       expect(mockRpcInstance.getTransaction).toHaveBeenCalledWith('TXHASH123');
@@ -164,45 +182,72 @@ describe('TokensService', () => {
     });
 
     it('returns error when getAccount throws', async () => {
-      mockRpcInstance.getAccount.mockRejectedValueOnce(new Error('network timeout'));
+      mockRpcInstance.getAccount.mockRejectedValueOnce(
+        new Error('network timeout'),
+      );
 
       const result = await service.mintTokens('GDEST', '100');
 
-      expect(result).toEqual({ error: 'mintTokens failed', details: 'network timeout' });
+      expect(result).toEqual({
+        error: 'mintTokens failed',
+        details: 'network timeout',
+      });
     });
 
     it('returns error when simulateTransaction throws', async () => {
-      mockRpcInstance.simulateTransaction.mockRejectedValueOnce(new Error('simulation failed'));
+      mockRpcInstance.simulateTransaction.mockRejectedValueOnce(
+        new Error('simulation failed'),
+      );
 
       const result = await service.mintTokens('GDEST', '100');
 
-      expect(result).toEqual({ error: 'mintTokens failed', details: 'simulation failed' });
+      expect(result).toEqual({
+        error: 'mintTokens failed',
+        details: 'simulation failed',
+      });
     });
 
     it('returns error when sendTransaction throws', async () => {
-      mockRpcInstance.sendTransaction.mockRejectedValueOnce(new Error('RPC unavailable'));
+      mockRpcInstance.sendTransaction.mockRejectedValueOnce(
+        new Error('RPC unavailable'),
+      );
 
       const result = await service.mintTokens('GDEST', '100');
 
-      expect(result).toEqual({ error: 'mintTokens failed', details: 'RPC unavailable' });
+      expect(result).toEqual({
+        error: 'mintTokens failed',
+        details: 'RPC unavailable',
+      });
     });
 
     it('returns error immediately when sendTransaction status is ERROR', async () => {
-      mockRpcInstance.sendTransaction.mockResolvedValueOnce({ status: 'ERROR', hash: 'TXHASH123' });
+      mockRpcInstance.sendTransaction.mockResolvedValueOnce({
+        status: 'ERROR',
+        hash: 'TXHASH123',
+      });
 
       const result = await service.mintTokens('GDEST', '100');
 
       expect(mockRpcInstance.getTransaction).not.toHaveBeenCalled();
-      expect(result).toEqual({ error: 'mintTokens failed', details: 'sendTransaction failed: ERROR' });
+      expect(result).toEqual({
+        error: 'mintTokens failed',
+        details: 'sendTransaction failed: ERROR',
+      });
     });
 
     it('returns error immediately when sendTransaction status is TRY_AGAIN_LATER', async () => {
-      mockRpcInstance.sendTransaction.mockResolvedValueOnce({ status: 'TRY_AGAIN_LATER', hash: 'TXHASH123' });
+      mockRpcInstance.sendTransaction.mockResolvedValueOnce({
+        status: 'TRY_AGAIN_LATER',
+        hash: 'TXHASH123',
+      });
 
       const result = await service.mintTokens('GDEST', '100');
 
       expect(mockRpcInstance.getTransaction).not.toHaveBeenCalled();
-      expect(result).toEqual({ error: 'mintTokens failed', details: 'sendTransaction failed: TRY_AGAIN_LATER' });
+      expect(result).toEqual({
+        error: 'mintTokens failed',
+        details: 'sendTransaction failed: TRY_AGAIN_LATER',
+      });
     });
 
     it('returns error when amount is not a valid integer string', async () => {
@@ -225,7 +270,10 @@ describe('TokensService', () => {
             provide: sorobanConfig.KEY,
             useValue: {
               ...defaultConfig,
-              contracts: { tokenMint: 'mint-contract', tokenSale: 'PLACEHOLDER_SALE' },
+              contracts: {
+                tokenMint: 'mint-contract',
+                tokenSale: 'PLACEHOLDER_SALE',
+              },
             },
           },
         ],
@@ -265,11 +313,16 @@ describe('TokensService', () => {
     });
 
     it('returns error when RPC call fails', async () => {
-      mockRpcInstance.getAccount.mockRejectedValueOnce(new Error('connection refused'));
+      mockRpcInstance.getAccount.mockRejectedValueOnce(
+        new Error('connection refused'),
+      );
 
       const result = await service.sellTokens('GSELLER', '10', '2');
 
-      expect(result).toEqual({ error: 'sellTokens failed', details: 'connection refused' });
+      expect(result).toEqual({
+        error: 'sellTokens failed',
+        details: 'connection refused',
+      });
     });
 
     it('returns error when amount is not a valid integer string', async () => {
@@ -300,7 +353,10 @@ describe('TokensService', () => {
           TokensService,
           {
             provide: sorobanConfig.KEY,
-            useValue: { ...defaultConfig, contracts: { tokenMint: '', tokenSale: 'sale-contract' } },
+            useValue: {
+              ...defaultConfig,
+              contracts: { tokenMint: '', tokenSale: 'sale-contract' },
+            },
           },
         ],
       }).compile();
@@ -315,7 +371,10 @@ describe('TokensService', () => {
       const result = await service.getBalance('GADDR');
 
       expect(StellarSdk.Contract).toHaveBeenCalledWith('mint-contract');
-      expect(mockContractInstance.call).toHaveBeenCalledWith('balance', 'mock-scval');
+      expect(mockContractInstance.call).toHaveBeenCalledWith(
+        'balance',
+        'mock-scval',
+      );
       expect(mockRpcInstance.simulateTransaction).toHaveBeenCalled();
       expect(StellarSdk.scValToNative).toHaveBeenCalledWith('mock-retval');
       expect(result).toEqual({ address: 'GADDR', balance: '1000' });
@@ -329,7 +388,9 @@ describe('TokensService', () => {
     });
 
     it('returns zero balance when simulation result has no retval', async () => {
-      mockRpcInstance.simulateTransaction.mockResolvedValueOnce({ result: null });
+      mockRpcInstance.simulateTransaction.mockResolvedValueOnce({
+        result: null,
+      });
 
       const result = await service.getBalance('GADDR');
 
@@ -337,19 +398,29 @@ describe('TokensService', () => {
     });
 
     it('returns error when getAccount throws', async () => {
-      mockRpcInstance.getAccount.mockRejectedValueOnce(new Error('network timeout'));
+      mockRpcInstance.getAccount.mockRejectedValueOnce(
+        new Error('network timeout'),
+      );
 
       const result = await service.getBalance('GADDR');
 
-      expect(result).toEqual({ error: 'getBalance failed', details: 'network timeout' });
+      expect(result).toEqual({
+        error: 'getBalance failed',
+        details: 'network timeout',
+      });
     });
 
     it('returns error when simulateTransaction throws', async () => {
-      mockRpcInstance.simulateTransaction.mockRejectedValueOnce(new Error('invalid contract'));
+      mockRpcInstance.simulateTransaction.mockRejectedValueOnce(
+        new Error('invalid contract'),
+      );
 
       const result = await service.getBalance('GADDR');
 
-      expect(result).toEqual({ error: 'getBalance failed', details: 'invalid contract' });
+      expect(result).toEqual({
+        error: 'getBalance failed',
+        details: 'invalid contract',
+      });
     });
   });
 });
