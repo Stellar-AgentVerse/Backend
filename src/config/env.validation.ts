@@ -128,6 +128,7 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
       contracts: {
         tokenMint: env.SOROBAN_TOKEN_MINT_CONTRACT_ID ?? DEV_DEFAULTS.stellar.contracts.tokenMint,
         tokenSale: env.SOROBAN_TOKEN_SALE_CONTRACT_ID ?? DEV_DEFAULTS.stellar.contracts.tokenSale,
+        purchaseContractId: env.SOROBAN_MARKETPLACE_CONTRACT_ID ?? DEV_DEFAULTS.stellar.contracts.purchaseContractId,
       },
       adminSecretKey: env.STELLAR_ADMIN_SECRET_KEY ?? DEV_DEFAULTS.stellar.adminSecretKey,
     },
