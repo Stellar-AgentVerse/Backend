@@ -33,6 +33,7 @@ describe('validateEnv', () => {
       contracts: {
         tokenMint: '',
         tokenSale: '',
+        purchaseContractId: '',
       },
     });
     expect(env.corsOrigins).toEqual(['http://localhost:3000', 'https://app.example']);

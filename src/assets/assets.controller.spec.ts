@@ -83,21 +83,24 @@ describe('AssetsController', () => {
     expect(assetsService.findById).toHaveBeenCalledWith('asset-1');
   });
 
-  it('uses a placeholder creator when create is called without creator query', async () => {
+  it('delegates create with the authenticated user publicKey', async () => {
     const dto = { name: 'Alpha', type: AssetType.AGENT };
     const created = { id: 'asset-1' };
+    const mockUser = { publicKey: 'GAUTHUSER123', iat: 1000 };
     assetsService.create.mockResolvedValue(created as never);
 
-    await expect(controller.create(dto as never)).resolves.toEqual(created);
-    expect(assetsService.create).toHaveBeenCalledWith(dto, 'creator-placeholder');
+    await expect(controller.create(dto as never, mockUser as never)).resolves.toEqual(created);
+    expect(assetsService.create).toHaveBeenCalledWith(dto, 'GAUTHUSER123');
   });
 
-  it('delegates create with an explicit creator', async () => {
-    const dto = { name: 'Alpha', type: AssetType.AGENT };
-    const created = { id: 'asset-1' };
+  it('derives the creator from the JWT payload, not from query params', async () => {
+    const dto = { name: 'Beta', type: AssetType.PROMPT };
+    const created = { id: 'asset-2' };
+    const mockUser = { publicKey: 'GJWTUSER456', iat: 2000 };
     assetsService.create.mockResolvedValue(created as never);
 
-    await expect(controller.create(dto as never, 'GBCREATOR...')).resolves.toEqual(created);
-    expect(assetsService.create).toHaveBeenCalledWith(dto, 'GBCREATOR...');
+    await expect(controller.create(dto as never, mockUser as never)).resolves.toEqual(created);
+    expect(assetsService.create).toHaveBeenCalledWith(dto, 'GJWTUSER456');
+    expect(assetsService.create).not.toHaveBeenCalledWith(dto, 'creator-placeholder');
   });
 });

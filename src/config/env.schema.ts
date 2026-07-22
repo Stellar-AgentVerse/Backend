@@ -17,6 +17,7 @@ export interface JwtEnv {
 export interface StellarContractsEnv {
   tokenMint: string;
   tokenSale: string;
+  purchaseContractId: string;
 }
 
 export interface StellarEnv {
@@ -56,6 +57,7 @@ export const DEV_DEFAULTS = {
     contracts: {
       tokenMint: '',
       tokenSale: '',
+      purchaseContractId: '',
     },
     adminSecretKey: '',
   },

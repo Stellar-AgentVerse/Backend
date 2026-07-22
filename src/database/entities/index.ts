@@ -11,3 +11,4 @@ export { WalletTransaction, TransactionType } from './wallet-transaction.entity'
 export { ActivityLog } from './activity-log.entity';
 export { UserAsset, UserAssetRole } from './user-asset.entity';
 export { Tag } from './tag.entity';
+export { Purchase, PurchaseStatus } from './purchase.entity';
