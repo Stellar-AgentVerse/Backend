@@ -25,6 +25,8 @@ services:
       dockerfile: Dockerfile
     container_name: agentverse-api
     restart: unless-stopped
+    env_file:
+      - .env
     ports:
       - "${API_PORT:-3000}:3000"
     environment:

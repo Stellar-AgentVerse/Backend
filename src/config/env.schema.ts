@@ -27,11 +27,16 @@ export interface StellarEnv {
   adminSecretKey: string;
 }
 
+export interface AwsEnv {
+  region: string;
+}
+
 export interface AppEnv {
   db: DatabaseEnv;
   jwt: JwtEnv;
   stellar: StellarEnv;
   corsOrigins: string[];
+  aws: AwsEnv;
 }
 
 export const DEV_DEFAULTS = {
@@ -60,4 +65,7 @@ export const DEV_DEFAULTS = {
     adminSecretKey: '',
   },
   corsOrigins: ['*'],
+  aws: {
+    region: 'us-east-1',
+  },
 } as const;

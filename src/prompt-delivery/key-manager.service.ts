@@ -1,8 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { KMSClient, DecryptCommand } from '@aws-sdk/client-kms';
+import { AppEnv } from '../config/env.schema';
 
 @Injectable()
 export class KeyManagerService {
   private readonly logger = new Logger(KeyManagerService.name);
+  private readonly kmsClient: KMSClient;
+
+  constructor(private readonly configService: ConfigService<AppEnv>) {
+    // ConfigService infer read from env.validation.ts
+    const region = this.configService.get('aws.region', { infer: true });
+    this.kmsClient = new KMSClient({ region: region || 'us-east-1' });
+  }
 
   /**
    * Retrieves a Data Encryption Key (DEK) via KMS using Workload Identity.
@@ -10,10 +20,23 @@ export class KeyManagerService {
    * The key is only held in memory temporarily.
    */
   async getDecryptionKey(tenantId: string, wrappedDek: string): Promise<Buffer> {
-    // TODO: Implement actual KMS call with Workload Identity
-    // For now, returning a mock key to satisfy interface.
-    this.logger.debug(`[MOCK] Soliciting decryption key for tenant ${tenantId}`);
-    return Buffer.from('mock-decrypted-key-32-bytes-long!', 'utf8');
+    this.logger.debug(`Soliciting decryption key for tenant ${tenantId} via AWS KMS`);
+    try {
+      const command = new DecryptCommand({
+        CiphertextBlob: Buffer.from(wrappedDek, 'base64'),
+      });
+      const response = await this.kmsClient.send(command);
+      
+      if (!response.Plaintext) {
+        throw new Error('KMS Decrypt response missing Plaintext');
+      }
+
+      // Convert Uint8Array to Node.js Buffer
+      return Buffer.from(response.Plaintext);
+    } catch (error: any) {
+      this.logger.error(`Failed to decrypt DEK for tenant ${tenantId}`, error.stack);
+      throw error;
+    }
   }
 
   /**
