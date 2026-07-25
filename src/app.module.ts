@@ -12,6 +12,7 @@ import { AssetsModule } from './assets/assets.module';
 import { WalletModule } from './wallet/wallet.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { PromptDeliveryModule } from './prompt-delivery/prompt-delivery.module';
 import { HealthModule } from './health/health.module';
 import { validateEnv } from './config/env.validation';
 import { APP_GUARD } from '@nestjs/core';
@@ -40,6 +41,7 @@ import { ThrottlerGuard, ThrottlerModule, seconds } from '@nestjs/throttler';
     MarketplaceModule,
     DashboardModule,
     HealthModule,
+    PromptDeliveryModule,
   ],
   controllers: [],
   providers: [

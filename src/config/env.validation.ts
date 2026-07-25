@@ -14,6 +14,7 @@ const REQUIRED_IN_PRODUCTION = {
     'STELLAR_ADMIN_SECRET_KEY',
   ] as const,
   cors: ['CORS_ORIGINS'] as const,
+  aws: ['AWS_REGION'] as const,
 };
 
 function parseBoolean(value: string | undefined, fallback: boolean, key: string): boolean {
@@ -102,6 +103,7 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
     }
 
     ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.cors[0]);
+    ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.aws[0]);
   }
 
   const validated: AppEnv = {
@@ -130,6 +132,9 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
       adminSecretKey: env.STELLAR_ADMIN_SECRET_KEY ?? DEV_DEFAULTS.stellar.adminSecretKey,
     },
     corsOrigins: parseCorsOrigins(env.CORS_ORIGINS, !isProduction),
+    aws: {
+      region: env.AWS_REGION ?? DEV_DEFAULTS.aws.region,
+    },
   };
 
   validatedEnvCache = validated;
