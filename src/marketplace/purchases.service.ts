@@ -42,8 +42,9 @@ export class PurchasesService implements OnModuleInit {
     },
   ) {
     this.MOCK_MODE =
-      !this.sorobanConfig.contracts.purchaseContractId ||
-      this.sorobanConfig.contracts.purchaseContractId.includes('PLACEHOLDER');
+      process.env.NODE_ENV === 'test' &&
+      (!this.sorobanConfig.contracts.purchaseContractId ||
+        this.sorobanConfig.contracts.purchaseContractId.includes('PLACEHOLDER'));
   }
 
   onModuleInit() {
@@ -298,6 +299,40 @@ export class PurchasesService implements OnModuleInit {
       const op = tx.operations[0];
       if (!op || (op as any).type !== 'invokeHostFunction') {
         this.logger.warn(`Transaction operation is not a contract invocation`);
+        return false;
+      }
+
+      const invoke = (op as any).func?._value;
+      if (!invoke || invoke.functionName?.toString() !== 'purchase') {
+        this.logger.warn(`Transaction does not invoke the purchase entrypoint`);
+        return false;
+      }
+
+      const StellarSdkAny = StellarSdk as any;
+      const expectedContract = Buffer.from(
+        StellarSdkAny.StrKey.decodeContract(expectedContractId),
+      );
+      const actualContract = Buffer.from(invoke.contractAddress.contractId());
+      if (!actualContract.equals(expectedContract)) {
+        this.logger.warn(`Transaction contract does not match purchase intent`);
+        return false;
+      }
+
+      const args = invoke.args ?? [];
+      if (args.length < 3) {
+        this.logger.warn(`Purchase invocation has insufficient arguments`);
+        return false;
+      }
+
+      const actualBuyer = StellarSdkAny.scValToNative(args[0]);
+      const actualAssetId = StellarSdkAny.scValToNative(args[1]);
+      const actualAmount = StellarSdkAny.scValToNative(args[2]);
+      if (
+        actualBuyer !== expectedBuyer ||
+        actualAssetId !== expectedAssetId ||
+        BigInt(actualAmount) !== BigInt(Math.round(expectedAmount * 100))
+      ) {
+        this.logger.warn(`Transaction arguments do not match purchase intent`);
         return false;
       }
 

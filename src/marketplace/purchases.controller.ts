@@ -19,7 +19,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { JwtPayload } from '../auth/common/interfaces/jwt-payload.interface';
+import type { JwtPayload } from '../auth/common/interfaces/jwt-payload.interface';
 import { PurchasesService } from './purchases.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { PurchaseIntentDto } from './dto/purchase-intent.dto';

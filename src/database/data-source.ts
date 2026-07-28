@@ -14,6 +14,7 @@ import {
   ActivityLog,
   UserAsset,
   Tag,
+  Purchase,
 } from './entities';
 
 const env = getValidatedEnv();
@@ -38,6 +39,7 @@ export const dataSourceOptions = {
     ActivityLog,
     UserAsset,
     Tag,
+    Purchase,
   ],
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
   synchronize: false,

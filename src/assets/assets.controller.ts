@@ -14,7 +14,7 @@ import { CreateAssetDto } from './dto/create-asset.dto';
 import { AssetResponseDto, AssetListResponseDto } from './dto/asset-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { JwtPayload } from '../auth/common/interfaces/jwt-payload.interface';
+import type { JwtPayload } from '../auth/common/interfaces/jwt-payload.interface';
 
 @ApiTags('assets')
 @Controller('assets')
