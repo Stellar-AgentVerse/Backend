@@ -44,7 +44,9 @@ export class PurchasesService implements OnModuleInit {
     this.MOCK_MODE =
       process.env.NODE_ENV === 'test' &&
       (!this.sorobanConfig.contracts.purchaseContractId ||
-        this.sorobanConfig.contracts.purchaseContractId.includes('PLACEHOLDER'));
+        this.sorobanConfig.contracts.purchaseContractId.includes(
+          'PLACEHOLDER',
+        ));
   }
 
   onModuleInit() {
@@ -79,19 +81,36 @@ export class PurchasesService implements OnModuleInit {
 
     const key = idempotencyKey ?? randomUUID();
     const existing = await this.purchaseRepo.findOne({
-      where: { idempotencyKey: key },
+      where: { buyerPublicKey, idempotencyKey: key },
     });
     if (existing) {
+      if (existing.assetId !== assetId) {
+        throw new ConflictException(
+          'Idempotency key is already bound to another asset',
+        );
+      }
       if (existing.status === PurchaseStatus.VERIFIED) {
         throw new ConflictException('Purchase already completed');
       }
-      return this.toIntentDto(existing);
+      return this.toIntentDto(existing, asset.id);
     }
 
     const amount = Number(asset.price);
-    const contractId = this.sorobanConfig.contracts.purchaseContractId || 'MOCK_CONTRACT';
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      throw new BadRequestException(
+        'PROMPT price must be a positive integer token amount',
+      );
+    }
+    const contractId =
+      this.sorobanConfig.contracts.purchaseContractId || 'MOCK_CONTRACT';
     const networkPassphrase = this.sorobanConfig.networkPassphrase;
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+
+    const unsignedXdr = await this.buildUnsignedXdr(
+      buyerPublicKey,
+      contractId,
+      asset.id,
+    );
 
     const purchase = this.purchaseRepo.create({
       id: randomUUID(),
@@ -108,13 +127,8 @@ export class PurchasesService implements OnModuleInit {
     });
 
     const saved = await this.purchaseRepo.save(purchase);
-    this.logger.log(`Purchase intent created: ${saved.id} for asset ${assetId} by ${buyerPublicKey}`);
-
-    const unsignedXdr = await this.buildUnsignedXdr(
-      buyerPublicKey,
-      contractId,
-      assetId,
-      amount,
+    this.logger.log(
+      `Purchase intent created: ${saved.id} for asset ${assetId} by ${buyerPublicKey}`,
     );
 
     return {
@@ -166,7 +180,6 @@ export class PurchasesService implements OnModuleInit {
       buyerPublicKey,
       purchase.contractId,
       purchase.assetId,
-      purchase.amount,
       purchase.networkPassphrase,
     );
     if (!isValid) {
@@ -218,11 +231,10 @@ export class PurchasesService implements OnModuleInit {
   private async buildUnsignedXdr(
     buyerPublicKey: string,
     contractId: string,
-    assetId: string,
-    amount: number,
+    promptId: string,
   ): Promise<string> {
     if (this.MOCK_MODE) {
-      return `AAAAAgAAAAB...mock-unsigned-xdr-for-purchase-${assetId.slice(0, 8)}...`;
+      return `AAAAAgAAAAB...mock-unsigned-xdr-for-buy_prompt-${promptId.slice(0, 8)}...`;
     }
 
     const StellarSdk = await import('@stellar/stellar-sdk');
@@ -236,12 +248,9 @@ export class PurchasesService implements OnModuleInit {
     })
       .addOperation(
         contract.call(
-          'purchase',
+          'buy_prompt',
           StellarSdk.Address.fromString(buyerPublicKey).toScVal(),
-          StellarSdk.nativeToScVal(assetId, { type: 'symbol' }),
-          StellarSdk.nativeToScVal(BigInt(Math.round(amount * 100)), {
-            type: 'i128',
-          }),
+          StellarSdk.nativeToScVal(promptId, { type: 'string' }),
         ),
       )
       .setTimeout(30)
@@ -256,8 +265,7 @@ export class PurchasesService implements OnModuleInit {
     transactionHash: string,
     expectedBuyer: string,
     expectedContractId: string,
-    expectedAssetId: string,
-    expectedAmount: number,
+    expectedPromptId: string,
     expectedNetworkPassphrase: string,
   ): Promise<boolean> {
     if (this.MOCK_MODE) {
@@ -303,8 +311,10 @@ export class PurchasesService implements OnModuleInit {
       }
 
       const invoke = (op as any).func?._value;
-      if (!invoke || invoke.functionName?.toString() !== 'purchase') {
-        this.logger.warn(`Transaction does not invoke the purchase entrypoint`);
+      if (!invoke || invoke.functionName?.toString() !== 'buy_prompt') {
+        this.logger.warn(
+          `Transaction does not invoke the buy_prompt entrypoint`,
+        );
         return false;
       }
 
@@ -319,18 +329,16 @@ export class PurchasesService implements OnModuleInit {
       }
 
       const args = invoke.args ?? [];
-      if (args.length < 3) {
-        this.logger.warn(`Purchase invocation has insufficient arguments`);
+      if (args.length !== 2) {
+        this.logger.warn(`buy_prompt invocation has invalid arguments`);
         return false;
       }
 
       const actualBuyer = StellarSdkAny.scValToNative(args[0]);
-      const actualAssetId = StellarSdkAny.scValToNative(args[1]);
-      const actualAmount = StellarSdkAny.scValToNative(args[2]);
+      const actualPromptId = StellarSdkAny.scValToNative(args[1]);
       if (
         actualBuyer !== expectedBuyer ||
-        actualAssetId !== expectedAssetId ||
-        BigInt(actualAmount) !== BigInt(Math.round(expectedAmount * 100))
+        actualPromptId !== expectedPromptId
       ) {
         this.logger.warn(`Transaction arguments do not match purchase intent`);
         return false;
@@ -345,10 +353,17 @@ export class PurchasesService implements OnModuleInit {
     }
   }
 
-  private toIntentDto(purchase: Purchase): PurchaseIntentDto {
+  private async toIntentDto(
+    purchase: Purchase,
+    promptId: string,
+  ): Promise<PurchaseIntentDto> {
     return {
       purchaseId: purchase.id,
-      unsignedXdr: '',
+      unsignedXdr: await this.buildUnsignedXdr(
+        purchase.buyerPublicKey,
+        purchase.contractId,
+        promptId,
+      ),
       expiresAt: purchase.expiresAt,
       contractId: purchase.contractId,
       networkPassphrase: purchase.networkPassphrase,

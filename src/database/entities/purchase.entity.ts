@@ -16,8 +16,11 @@ export enum PurchaseStatus {
 
 @Entity('purchases')
 @Index(['buyerPublicKey', 'status'])
-@Index(['idempotencyKey'], { unique: true })
-@Index(['transactionHash'], { unique: true, where: '"transactionHash" IS NOT NULL' })
+@Index(['buyerPublicKey', 'idempotencyKey'], { unique: true })
+@Index(['transactionHash'], {
+  unique: true,
+  where: '"transactionHash" IS NOT NULL',
+})
 @Index(['assetId', 'buyerPublicKey'])
 export class Purchase {
   @PrimaryGeneratedColumn('uuid')
@@ -29,10 +32,14 @@ export class Purchase {
   @Column({ type: 'varchar', length: 56 })
   buyerPublicKey: string;
 
-  @Column({ type: 'enum', enum: PurchaseStatus, default: PurchaseStatus.PENDING })
+  @Column({
+    type: 'enum',
+    enum: PurchaseStatus,
+    default: PurchaseStatus.PENDING,
+  })
   status: PurchaseStatus;
 
-  @Column({ type: 'varchar', length: 64, unique: true })
+  @Column({ type: 'varchar', length: 64 })
   idempotencyKey: string;
 
   @Column({ type: 'varchar', length: 64, nullable: true })

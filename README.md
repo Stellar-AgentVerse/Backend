@@ -73,6 +73,8 @@ Docs use bearer auth and stay disabled in production unless `SWAGGER_ENABLED=tru
 | `JWT_SECRET` | `dev-secret` in dev | JWT signing secret |
 | `JWT_EXPIRES_IN` | `24h` | JWT token lifetime |
 | `SOROBAN_MARKETPLACE_CONTRACT_ID` | — | Deployed PromptMarketplace contract used by purchase intents |
+| `S3_ENDPOINT` / `S3_BUCKET` | `http://localhost:9000` / `agentverse-prompts` | S3-compatible prompt blob storage; Docker Compose runs MinIO locally |
+| `PROMPT_CONTENT_ENCRYPTION_KEY` | — | Base64-encoded 32-byte key used to encrypt prompt blobs before storage |
 
 ## Marketplace purchase flow
 

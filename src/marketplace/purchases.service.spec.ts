@@ -99,8 +99,10 @@ describe('PurchasesService', () => {
         amount: 25,
         idempotencyKey: 'idem-001',
       });
-      expect(result.unsignedXdr).toContain('mock-unsigned-xdr');
-      expect(assetRepo.findOne).toHaveBeenCalledWith({ where: { id: assetId } });
+      expect(result.unsignedXdr).toContain('mock-unsigned-xdr-for-buy_prompt');
+      expect(assetRepo.findOne).toHaveBeenCalledWith({
+        where: { id: assetId },
+      });
     });
 
     it('rejects non-existent asset', async () => {
@@ -169,6 +171,46 @@ describe('PurchasesService', () => {
 
       expect(result.purchaseId).toBe('existing-id');
       expect(purchaseRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('scopes idempotency keys to the buyer and rejects another asset', async () => {
+      const publishedAsset = {
+        id: assetId,
+        type: AssetType.PROMPT,
+        status: 'PUBLISHED',
+        price: 25,
+      } as Asset;
+      const existingPurchase = {
+        id: 'existing-id',
+        assetId: 'another-asset',
+        buyerPublicKey: buyerKey,
+        status: PurchaseStatus.PENDING,
+        idempotencyKey: 'idem-shared',
+      } as Purchase;
+
+      assetRepo.findOne.mockResolvedValue(publishedAsset);
+      purchaseRepo.findOne.mockResolvedValue(existingPurchase);
+
+      await expect(
+        service.createIntent(assetId, buyerKey, 'idem-shared'),
+      ).rejects.toThrow(ConflictException);
+      expect(purchaseRepo.findOne).toHaveBeenCalledWith({
+        where: { buyerPublicKey: buyerKey, idempotencyKey: 'idem-shared' },
+      });
+    });
+
+    it('rejects fractional prompt prices because the contract charges atomic units', async () => {
+      assetRepo.findOne.mockResolvedValue({
+        id: assetId,
+        type: AssetType.PROMPT,
+        status: 'PUBLISHED',
+        price: 12.5,
+      } as Asset);
+      purchaseRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.createIntent(assetId, buyerKey)).rejects.toThrow(
+        'positive integer token amount',
+      );
     });
 
     it('throws ConflictException for already-verified purchase with same key', async () => {
@@ -364,9 +406,9 @@ describe('PurchasesService', () => {
 
       purchaseRepo.findOne.mockResolvedValue(verifiedPurchase);
 
-      await expect(
-        service.getAccess(purchaseId, otherKey),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.getAccess(purchaseId, otherKey)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('rejects non-verified purchase', async () => {
@@ -378,17 +420,17 @@ describe('PurchasesService', () => {
 
       purchaseRepo.findOne.mockResolvedValue(pendingPurchase);
 
-      await expect(
-        service.getAccess(purchaseId, buyerKey),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.getAccess(purchaseId, buyerKey)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('rejects non-existent purchase', async () => {
       purchaseRepo.findOne.mockResolvedValue(null);
 
-      await expect(
-        service.getAccess('nonexistent', buyerKey),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getAccess('nonexistent', buyerKey)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });
