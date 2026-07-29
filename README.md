@@ -72,6 +72,21 @@ Docs use bearer auth and stay disabled in production unless `SWAGGER_ENABLED=tru
 | `DB_LOGGING` | `false` | TypeORM SQL logging |
 | `JWT_SECRET` | `dev-secret` in dev | JWT signing secret |
 | `JWT_EXPIRES_IN` | `24h` | JWT token lifetime |
+| `SOROBAN_MARKETPLACE_CONTRACT_ID` | — | Deployed PromptMarketplace contract used by purchase intents |
+| `S3_ENDPOINT` / `S3_BUCKET` | `http://localhost:9000` / `agentverse-prompts` | S3-compatible prompt blob storage; Docker Compose runs MinIO locally |
+| `PROMPT_CONTENT_ENCRYPTION_KEY` | — | Base64-encoded 32-byte key used to encrypt prompt blobs before storage |
+| `AWS_KMS_KEY_ID` | — | KMS key used with tenant and delivery encryption context |
+| `PROMPT_DELIVERY_WORKER_ENABLED` | `false` | Enables the PostgreSQL delivery worker polling loop |
+
+## Marketplace purchase flow
+
+Purchase intents are JWT-protected and scoped to published `PROMPT` assets. The buyer signs the returned unsigned XDR locally, then submits only the transaction hash for RPC verification. Run the purchase migration before starting a deployment:
+
+```bash
+npm run migration:run
+```
+
+Production requires `SOROBAN_MARKETPLACE_CONTRACT_ID`; the Testnet contract cannot be omitted or replaced by the development mock.
 | `STELLAR_NETWORK` | `testnet` | Stellar network name |
 | `STELLAR_RPC_URL` | `https://soroban-testnet.stellar.org` | Soroban RPC endpoint |
 | `STELLAR_NETWORK_PASSPHRASE` | `Test SDF Network ; September 2015` | Stellar network passphrase |

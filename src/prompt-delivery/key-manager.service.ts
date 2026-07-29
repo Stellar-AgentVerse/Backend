@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { KMSClient, DecryptCommand } from '@aws-sdk/client-kms';
+import { KMSClient, DecryptCommand, EncryptCommand } from '@aws-sdk/client-kms';
 import { AppEnv } from '../config/env.schema';
 
 @Injectable()
@@ -19,14 +19,19 @@ export class KeyManagerService {
    * Uses Envelope Encryption: DEK is unwrapped using a KMS-managed KEK.
    * The key is only held in memory temporarily.
    */
-  async getDecryptionKey(tenantId: string, wrappedDek: string): Promise<Buffer> {
-    this.logger.debug(`Soliciting decryption key for tenant ${tenantId} via AWS KMS`);
+  async getDecryptionKey(
+    tenantId: string,
+    wrappedDek: string,
+    context: Record<string, string> = {},
+  ): Promise<Buffer> {
     try {
       const command = new DecryptCommand({
         CiphertextBlob: Buffer.from(wrappedDek, 'base64'),
+        KeyId: this.configService.get('aws.keyId', { infer: true }),
+        EncryptionContext: { tenantId, ...context },
       });
       const response = await this.kmsClient.send(command);
-      
+
       if (!response.Plaintext) {
         throw new Error('KMS Decrypt response missing Plaintext');
       }
@@ -34,8 +39,31 @@ export class KeyManagerService {
       // Convert Uint8Array to Node.js Buffer
       return Buffer.from(response.Plaintext);
     } catch (error: any) {
-      this.logger.error(`Failed to decrypt DEK for tenant ${tenantId}`, error.stack);
-      throw error;
+      this.logger.error('KMS decrypt failed', error?.stack);
+      if (error?.message === 'KMS Decrypt response missing Plaintext')
+        throw error;
+      throw new Error('KMS decrypt failed');
+    }
+  }
+
+  async wrapKey(
+    key: Buffer,
+    tenantId: string,
+    context: Record<string, string> = {},
+  ): Promise<Buffer> {
+    try {
+      const response = await this.kmsClient.send(
+        new EncryptCommand({
+          KeyId: this.configService.get('aws.keyId', { infer: true }),
+          Plaintext: key,
+          EncryptionContext: { tenantId, ...context },
+        }),
+      );
+      if (!response.CiphertextBlob) throw new Error('missing ciphertext');
+      return Buffer.from(response.CiphertextBlob);
+    } catch (error: any) {
+      this.logger.error('KMS encrypt failed', error?.stack);
+      throw new Error('KMS encrypt failed');
     }
   }
 

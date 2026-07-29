@@ -5,12 +5,16 @@ import {
   Body,
   Param,
   Query,
+  UseGuards,
   Logger,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AssetsService } from './assets.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { AssetResponseDto, AssetListResponseDto } from './dto/asset-response.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { JwtPayload } from '../auth/common/interfaces/jwt-payload.interface';
 
 @ApiTags('assets')
 @Controller('assets')
@@ -63,14 +67,15 @@ export class AssetsController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create an asset' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create an asset (JWT required)' })
   @ApiBody({ type: CreateAssetDto })
   async create(
     @Body() dto: CreateAssetDto,
-    @Query('creator') creator?: string,
+    @CurrentUser() user: JwtPayload,
   ): Promise<AssetResponseDto> {
-    const publicKey = creator || 'creator-placeholder';
-    this.logger.log(`Creating asset for ${publicKey}`);
-    return this.assetsService.create(dto, publicKey);
+    this.logger.log(`Creating asset for ${user.publicKey}`);
+    return this.assetsService.create(dto, user.publicKey);
   }
 }

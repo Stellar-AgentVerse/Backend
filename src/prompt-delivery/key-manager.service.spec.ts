@@ -39,11 +39,11 @@ describe('KeyManagerService', () => {
     });
 
     const key = await service.getDecryptionKey('tenant-1', 'wrapped-dek-123');
-    
+
     expect(kmsClientMock.send).toHaveBeenCalled();
     const commandArg = (kmsClientMock.send as jest.Mock).mock.calls[0][0];
     expect(commandArg).toBeInstanceOf(DecryptCommand);
-    
+
     expect(key).toBeInstanceOf(Buffer);
     expect(key.toString('utf8')).toBe('mock-decrypted-key-from-aws');
   });
@@ -51,15 +51,15 @@ describe('KeyManagerService', () => {
   it('should throw error if KMS Decrypt response missing Plaintext', async () => {
     kmsClientMock.send = jest.fn().mockResolvedValue({});
 
-    await expect(service.getDecryptionKey('tenant-1', 'wrapped-dek-123')).rejects.toThrow(
-      'KMS Decrypt response missing Plaintext',
-    );
+    await expect(
+      service.getDecryptionKey('tenant-1', 'wrapped-dek-123'),
+    ).rejects.toThrow('KMS Decrypt response missing Plaintext');
   });
 
   it('should explicitly zero out the key buffer in memory', () => {
     const key = Buffer.from('my-super-secret-key-that-must-not-leak');
     service.zeroKey(key);
-    
+
     // El buffer debe mantener su longitud pero estar lleno de ceros
     expect(key.length).toBe(38);
     for (let i = 0; i < key.length; i++) {

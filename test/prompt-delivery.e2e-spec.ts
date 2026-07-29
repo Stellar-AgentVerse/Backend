@@ -1,62 +1,50 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { PromptDeliveryModule } from '../src/prompt-delivery/prompt-delivery.module';
-import { PromptExecutionService, OffChainExecutionPayload } from '../src/prompt-delivery/prompt-execution.service';
+import { BadRequestException } from '@nestjs/common';
+import {
+  OffChainExecutionPayload,
+  PromptExecutionService,
+} from '../src/prompt-delivery/prompt-execution.service';
+import { PromptDeliveryService } from '../src/prompt-delivery/prompt-delivery.service';
 
-describe('PromptDeliveryModule (e2e)', () => {
-  let executionService: PromptExecutionService;
-  let stdoutSpy: jest.SpyInstance;
+describe('PromptExecutionService delivery boundary', () => {
+  const verifiedEvent: OffChainExecutionPayload = {
+    network: 'testnet',
+    contractId: 'C123',
+    transactionHash: 'hash-success-123',
+    ledgerSequence: 123,
+    eventIndex: 0,
+    purchaseId: '7ef916ba-ee67-4f02-8c23-8d8343d5bd98',
+    assetId: '7ef916ba-ee67-4f02-8c23-8d8343d5bd99',
+    buyerPublicKey: 'GBSHARK',
+    tenantId: 'tenant-1',
+    providerName: 'openai',
+    expiresAt: '2030-01-01T00:00:00.000Z',
+    wrappedDek: 'wrapped-dek',
+    encryptedPrompt: 'encrypted-prompt',
+  };
 
-  beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [PromptDeliveryModule],
-    }).compile();
+  it('accepts only verified purchase events for asynchronous delivery', async () => {
+    const delivery = {
+      acceptVerifiedEvent: jest.fn().mockResolvedValue({
+        canonicalId: 'canonical-id',
+        state: 'AUTHORIZED',
+      }),
+    } as unknown as PromptDeliveryService;
+    const execution = new PromptExecutionService(delivery);
 
-    executionService = moduleFixture.get<PromptExecutionService>(PromptExecutionService);
-    // Suppress and inspect stdout
-    stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    await expect(
+      execution.acceptVerifiedPurchase(verifiedEvent),
+    ).resolves.toEqual({
+      canonicalId: 'canonical-id',
+      state: 'AUTHORIZED',
+    });
+    expect(delivery.acceptVerifiedEvent).toHaveBeenCalledWith(verifiedEvent);
   });
 
-  afterAll(() => {
-    jest.restoreAllMocks();
-  });
+  it('rejects the retired direct-execution path', async () => {
+    const execution = new PromptExecutionService({} as PromptDeliveryService);
 
-  it('should execute prompt delivery successfully without leaking plaintext', async () => {
-    const payload: OffChainExecutionPayload = {
-      network: 'testnet',
-      transactionHash: 'hash-success-123',
-      contractId: 'C123',
-      eventIndex: 0,
-      tenantId: 'tenant-1',
-      wrappedDek: 'wrapped-dek',
-      encryptedPrompt: 'encrypted-base64',
-      providerName: 'openai'
-    };
-
-    const response = await executionService.executeEncryptedPrompt(payload);
-    expect(response).toContain('[MOCK ENCRYPTED RESPONSE');
-
-    // Comprobamos que el plaintext de la respuesta o del prompt no haya escapado a process.stdout (logs)
-    const allStdout = stdoutSpy.mock.calls.map(call => call[0]).join('');
-    expect(allStdout).not.toContain('mock-openai-response');
-    // En logs (si existieran, aunque aquí usamos Logger de nest que va a stdout)
-  });
-
-  it('should prevent replay attacks end-to-end', async () => {
-    const payload: OffChainExecutionPayload = {
-      network: 'testnet',
-      transactionHash: 'hash-replay-456',
-      contractId: 'C456',
-      eventIndex: 1,
-      tenantId: 'tenant-1',
-      wrappedDek: 'wrapped-dek',
-      encryptedPrompt: 'encrypted-base64',
-      providerName: 'claude'
-    };
-
-    // Primera vez exitoso
-    await expect(executionService.executeEncryptedPrompt(payload)).resolves.toBeDefined();
-
-    // Segunda vez falla por replay guard
-    await expect(executionService.executeEncryptedPrompt(payload)).rejects.toThrow('Este evento ya fue procesado');
+    await expect(
+      execution.executeEncryptedPrompt(verifiedEvent),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
