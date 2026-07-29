@@ -30,6 +30,7 @@ export interface StellarEnv {
 
 export interface AwsEnv {
   region: string;
+  keyId?: string;
 }
 
 export interface AppEnv {

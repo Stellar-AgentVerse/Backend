@@ -15,6 +15,9 @@ import {
   UserAsset,
   Tag,
   Purchase,
+  DeliveryCommandEntity,
+  DeliveryResultEntity,
+  DeliveryOutboxEntity,
 } from './entities';
 
 const env = getValidatedEnv();

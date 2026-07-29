@@ -15,10 +15,14 @@ const REQUIRED_IN_PRODUCTION = {
     'STELLAR_ADMIN_SECRET_KEY',
   ] as const,
   cors: ['CORS_ORIGINS'] as const,
-  aws: ['AWS_REGION'] as const,
+  aws: ['AWS_REGION', 'AWS_KMS_KEY_ID'] as const,
 };
 
-function parseBoolean(value: string | undefined, fallback: boolean, key: string): boolean {
+function parseBoolean(
+  value: string | undefined,
+  fallback: boolean,
+  key: string,
+): boolean {
   if (value === undefined || value.trim() === '') {
     return fallback;
   }
@@ -50,7 +54,10 @@ function parsePort(value: string | undefined, fallback: number): number {
   return port;
 }
 
-function parseCorsOrigins(value: string | undefined, allowWildcard: boolean): string[] {
+function parseCorsOrigins(
+  value: string | undefined,
+  allowWildcard: boolean,
+): string[] {
   if (value === undefined || value.trim() === '') {
     return allowWildcard ? [...DEV_DEFAULTS.corsOrigins] : [];
   }
@@ -105,6 +112,7 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
 
     ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.cors[0]);
     ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.aws[0]);
+    ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.aws[1]);
   }
 
   const validated: AppEnv = {
@@ -114,9 +122,21 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
       username: env.DB_USERNAME ?? DEV_DEFAULTS.db.username,
       password: env.DB_PASSWORD ?? DEV_DEFAULTS.db.password,
       database: env.DB_NAME ?? DEV_DEFAULTS.db.database,
-      synchronize: parseBoolean(env.DB_SYNCHRONIZE, isProduction ? false : DEV_DEFAULTS.db.synchronize, 'DB_SYNCHRONIZE'),
-      logging: parseBoolean(env.DB_LOGGING, DEV_DEFAULTS.db.logging, 'DB_LOGGING'),
-      seedOnStartup: parseBoolean(env.DB_SEED_ON_STARTUP, !isProduction, 'DB_SEED_ON_STARTUP'),
+      synchronize: parseBoolean(
+        env.DB_SYNCHRONIZE,
+        isProduction ? false : DEV_DEFAULTS.db.synchronize,
+        'DB_SYNCHRONIZE',
+      ),
+      logging: parseBoolean(
+        env.DB_LOGGING,
+        DEV_DEFAULTS.db.logging,
+        'DB_LOGGING',
+      ),
+      seedOnStartup: parseBoolean(
+        env.DB_SEED_ON_STARTUP,
+        !isProduction,
+        'DB_SEED_ON_STARTUP',
+      ),
     },
     jwt: {
       secret: env.JWT_SECRET ?? DEV_DEFAULTS.jwt.secret,
@@ -125,17 +145,27 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
     stellar: {
       network: env.STELLAR_NETWORK ?? DEV_DEFAULTS.stellar.network,
       rpcUrl: env.STELLAR_RPC_URL ?? DEV_DEFAULTS.stellar.rpcUrl,
-      networkPassphrase: env.STELLAR_NETWORK_PASSPHRASE ?? DEV_DEFAULTS.stellar.networkPassphrase,
+      networkPassphrase:
+        env.STELLAR_NETWORK_PASSPHRASE ??
+        DEV_DEFAULTS.stellar.networkPassphrase,
       contracts: {
-        tokenMint: env.SOROBAN_TOKEN_MINT_CONTRACT_ID ?? DEV_DEFAULTS.stellar.contracts.tokenMint,
-        tokenSale: env.SOROBAN_TOKEN_SALE_CONTRACT_ID ?? DEV_DEFAULTS.stellar.contracts.tokenSale,
-        purchaseContractId: env.SOROBAN_MARKETPLACE_CONTRACT_ID ?? DEV_DEFAULTS.stellar.contracts.purchaseContractId,
+        tokenMint:
+          env.SOROBAN_TOKEN_MINT_CONTRACT_ID ??
+          DEV_DEFAULTS.stellar.contracts.tokenMint,
+        tokenSale:
+          env.SOROBAN_TOKEN_SALE_CONTRACT_ID ??
+          DEV_DEFAULTS.stellar.contracts.tokenSale,
+        purchaseContractId:
+          env.SOROBAN_MARKETPLACE_CONTRACT_ID ??
+          DEV_DEFAULTS.stellar.contracts.purchaseContractId,
       },
-      adminSecretKey: env.STELLAR_ADMIN_SECRET_KEY ?? DEV_DEFAULTS.stellar.adminSecretKey,
+      adminSecretKey:
+        env.STELLAR_ADMIN_SECRET_KEY ?? DEV_DEFAULTS.stellar.adminSecretKey,
     },
     corsOrigins: parseCorsOrigins(env.CORS_ORIGINS, !isProduction),
     aws: {
       region: env.AWS_REGION ?? DEV_DEFAULTS.aws.region,
+      keyId: env.AWS_KMS_KEY_ID,
     },
   };
 

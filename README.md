@@ -75,6 +75,8 @@ Docs use bearer auth and stay disabled in production unless `SWAGGER_ENABLED=tru
 | `SOROBAN_MARKETPLACE_CONTRACT_ID` | — | Deployed PromptMarketplace contract used by purchase intents |
 | `S3_ENDPOINT` / `S3_BUCKET` | `http://localhost:9000` / `agentverse-prompts` | S3-compatible prompt blob storage; Docker Compose runs MinIO locally |
 | `PROMPT_CONTENT_ENCRYPTION_KEY` | — | Base64-encoded 32-byte key used to encrypt prompt blobs before storage |
+| `AWS_KMS_KEY_ID` | — | KMS key used with tenant and delivery encryption context |
+| `PROMPT_DELIVERY_WORKER_ENABLED` | `false` | Enables the PostgreSQL delivery worker polling loop |
 
 ## Marketplace purchase flow
 

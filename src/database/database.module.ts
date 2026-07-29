@@ -15,6 +15,10 @@ import {
   ActivityLog,
   UserAsset,
   Tag,
+  Purchase,
+  DeliveryCommandEntity,
+  DeliveryResultEntity,
+  DeliveryOutboxEntity,
 } from './entities';
 
 const entities = [
@@ -30,6 +34,10 @@ const entities = [
   ActivityLog,
   UserAsset,
   Tag,
+  Purchase,
+  DeliveryCommandEntity,
+  DeliveryResultEntity,
+  DeliveryOutboxEntity,
 ];
 
 @Global()
