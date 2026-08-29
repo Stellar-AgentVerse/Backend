@@ -1,0 +1,201 @@
+name: staging-smoke
+
+# Provisions a throwaway, production-like environment on every run and proves the
+# market journey against it: schema built by migrations, DB_SYNCHRONIZE=false,
+# the compiled entrypoint, and the smoke suite in test/staging-smoke.smoke-spec.ts.
+#
+# This is deliberately a separate workflow from `ci`. `ci` owns lint/test/build
+# quality gates and is red on main for reasons tracked in #14; gating release
+# evidence on that would mean this never runs.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agentverse_staging
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agentverse_staging"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: agentverse_staging
+      # The point of this workflow: the schema is owned by migrations, never by
+      # auto-synchronize. `ci` runs with DB_SYNCHRONIZE=true, which is why the
+      # drift this suite catches was invisible there.
+      DB_SYNCHRONIZE: false
+      DB_SEED_ON_STARTUP: false
+      DB_LOGGING: false
+      JWT_SECRET: staging-smoke-secret
+      STELLAR_NETWORK: testnet
+      STELLAR_RPC_URL: https://soroban-testnet.stellar.org
+      STELLAR_NETWORK_PASSPHRASE: Test SDF Network ; September 2015
+      # No SOROBAN_MARKETPLACE_CONTRACT_ID and no STELLAR_ADMIN_SECRET_KEY are set
+      # anywhere in this workflow. That is intentional on both counts: it keeps
+      # long-lived signing keys out of CI, and it proves the application boots
+      # without one. A configured environment is exercised by running this suite
+      # against real staging (see docs/release-runbook.md).
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify the deploy entrypoints exist
+        run: |
+          set -euo pipefail
+          for artifact in dist/main.js dist/database/data-source.js; do
+            if [ ! -f "$artifact" ]; then
+              echo "::error::$artifact was not emitted; the container entrypoint cannot start"
+              exit 1
+            fi
+            echo "ok: $artifact"
+          done
+
+      - name: Apply migrations with the compiled data source
+        run: npm run migration:run:prod
+
+      - name: Verify the schema is owned by migrations
+        run: |
+          set -euo pipefail
+          applied=$(node -e "
+            const { Client } = require('pg');
+            const c = new Client({
+              host: process.env.DB_HOST, port: Number(process.env.DB_PORT),
+              user: process.env.DB_USERNAME, password: process.env.DB_PASSWORD,
+              database: process.env.DB_NAME,
+            });
+            c.connect()
+              .then(() => c.query('SELECT count(*)::int AS n FROM migrations'))
+              .then((r) => { console.log(r.rows[0].n); return c.end(); })
+              .catch((e) => { console.error(e.message); process.exit(1); });
+          ")
+          echo "migrations applied: $applied"
+          if [ "$applied" -lt 5 ]; then
+            echo "::error::expected at least 5 applied migrations, found $applied"
+            exit 1
+          fi
+
+      - name: Start the compiled application under production validation
+        run: |
+          set -euo pipefail
+          # Generated per run, never written to a file, never echoed, never
+          # persisted. env.validation.ts requires the variable in production;
+          # this run never signs anything with it.
+          export STELLAR_ADMIN_SECRET_KEY="$(node -e "console.log(require('@stellar/stellar-sdk').Keypair.random().secret())")"
+          # Required by the same validator. Nothing in this run calls KMS; a real
+          # environment supplies the deployed key id.
+          export AWS_KMS_KEY_ID="alias/agentverse-staging"
+          export AWS_REGION="us-east-1"
+          export CORS_ORIGINS="http://localhost:3000"
+          export SOROBAN_TOKEN_MINT_CONTRACT_ID="PLACEHOLDER"
+          export SOROBAN_TOKEN_SALE_CONTRACT_ID="PLACEHOLDER"
+          export SOROBAN_MARKETPLACE_CONTRACT_ID="PLACEHOLDER"
+          export NODE_ENV=production
+          export PORT=3000
+          # nohup so the process survives this step's shell exiting.
+          nohup node dist/main > staging-boot.log 2>&1 &
+          echo $! > app.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/api/health/live > /dev/null 2>&1; then
+              echo "application answered liveness after ${attempt}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::application did not become live within 30s"
+          cat staging-boot.log
+          exit 1
+
+      - name: Probe readiness against the deployed schema
+        run: |
+          set -euo pipefail
+          body=$(curl -fsS http://127.0.0.1:3000/api/health)
+          echo "$body"
+          node -e "
+            const report = JSON.parse(process.argv[1]);
+            const byName = Object.fromEntries(report.checks.map((c) => [c.name, c]));
+            const failures = [];
+            if (report.status !== 'ok') failures.push('status is ' + report.status);
+            if (byName.database?.status !== 'ok') failures.push('database check failed');
+            if (byName.schema?.status !== 'ok') failures.push('schema check failed');
+            if (byName.schema?.detail !== 'AlignMigratedSchemaWithEntities1700000004000') {
+              failures.push('unexpected applied migration: ' + byName.schema?.detail);
+            }
+            if (failures.length) { console.error(failures.join('; ')); process.exit(1); }
+            console.log('readiness verified');
+          " "$body"
+
+      - name: Stop the application
+        if: always()
+        run: |
+          if [ -f app.pid ]; then kill "$(cat app.pid)" 2>/dev/null || true; fi
+
+      - name: Run the staging smoke suite
+        run: npm run test:smoke
+
+      - name: Assert no signing key reached the repository or the logs
+        if: always()
+        run: |
+          set -euo pipefail
+          # Stellar secret seeds are 56 characters starting with 'S'. Committed
+          # tracked files and this run's captured output must contain none.
+          if git grep -nIE '\bS[A-Z2-7]{55}\b' -- . ':!*.lock' ':!package-lock.json'; then
+            echo "::error::a Stellar secret seed appears in a tracked file"
+            exit 1
+          fi
+          if [ -f staging-boot.log ] && grep -qE '\bS[A-Z2-7]{55}\b' staging-boot.log; then
+            echo "::error::a Stellar secret seed was printed to the application log"
+            exit 1
+          fi
+          echo "no signing key found in tracked files or captured logs"
+
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-smoke-evidence
+          path: staging-boot.log
+          if-no-files-found: warn
+          retention-days: 14
