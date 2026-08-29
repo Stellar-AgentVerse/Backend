@@ -24,6 +24,12 @@ export interface HealthReport {
 /** Soroban RPC is polled at most once per window; health probes run often. */
 const RPC_CACHE_TTL_MS = 15_000;
 const RPC_TIMEOUT_MS = 2_000;
+/**
+ * A partitioned database accepts the TCP connect and then never answers, so an
+ * unbounded query would hang the probe instead of reporting 503 — the one thing
+ * a readiness endpoint must not do.
+ */
+const DB_TIMEOUT_MS = 3_000;
 
 type SorobanSettings = {
   rpcUrl: string;
@@ -46,13 +52,14 @@ export class HealthService {
    * `error`, which the controller surfaces as HTTP 503.
    */
   async check(): Promise<HealthReport> {
-    const checks = [
-      await this.checkDatabase(),
-      await this.checkSchema(),
-      await this.checkSorobanRpc(),
-      this.checkMarketplaceContract(),
-      this.checkDeliveryWorker(),
-    ];
+    // Concurrent: one slow dependency must not add its latency to the others.
+    const checks = await Promise.all([
+      this.checkDatabase(),
+      this.checkSchema(),
+      this.checkSorobanRpc(),
+      Promise.resolve(this.checkMarketplaceContract()),
+      Promise.resolve(this.checkDeliveryWorker()),
+    ]);
 
     const degraded = checks.some(
       (check) => check.required && check.status === 'error',
@@ -68,10 +75,35 @@ export class HealthService {
     };
   }
 
+  /** Auto-synchronize builds the schema itself and never creates a migrations table. */
+  private get schemaIsMigrationOwned(): boolean {
+    return this.dataSource.options?.synchronize !== true;
+  }
+
+  private async withDeadline<T>(work: Promise<T>, label: string): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        work,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error(`${label} did not answer within ${DB_TIMEOUT_MS}ms`),
+              ),
+            DB_TIMEOUT_MS,
+          );
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
   private async checkDatabase(): Promise<DependencyCheck> {
     const startedAt = Date.now();
     try {
-      await this.dataSource.query('SELECT 1');
+      await this.withDeadline(this.dataSource.query('SELECT 1'), 'database');
       return {
         name: 'database',
         status: 'ok',
@@ -96,9 +128,22 @@ export class HealthService {
    * version is live, which the release runbook records.
    */
   private async checkSchema(): Promise<DependencyCheck> {
+    if (!this.schemaIsMigrationOwned) {
+      return {
+        name: 'schema',
+        status: 'skipped',
+        required: false,
+        detail:
+          'DB_SYNCHRONIZE is enabled; the schema is owned by auto-synchronize',
+      };
+    }
+
     try {
-      const rows = await this.dataSource.query<{ name: string }[]>(
-        'SELECT name FROM migrations ORDER BY timestamp DESC LIMIT 1',
+      const rows = await this.withDeadline(
+        this.dataSource.query<{ name: string }[]>(
+          'SELECT name FROM migrations ORDER BY timestamp DESC LIMIT 1',
+        ),
+        'schema',
       );
       const latest = rows?.[0]?.name;
 

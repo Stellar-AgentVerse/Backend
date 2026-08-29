@@ -13,7 +13,7 @@ function find(checks: DependencyCheck[], name: string): DependencyCheck {
 
 describe('HealthService', () => {
   let service: HealthService;
-  let dataSource: { query: jest.Mock };
+  let dataSource: { query: jest.Mock; options: { synchronize: boolean } };
   let soroban: { rpcUrl: string; contracts: { purchaseContractId: string } };
   let fetchMock: jest.Mock;
 
@@ -34,6 +34,7 @@ describe('HealthService', () => {
 
   beforeEach(async () => {
     dataSource = {
+      options: { synchronize: false },
       query: jest
         .fn()
         .mockImplementation((sql: string) =>
@@ -96,6 +97,32 @@ describe('HealthService', () => {
     expect(find(report.checks, 'schema').detail).toBe(
       'no migrations have been applied',
     );
+  });
+
+  it('should not require a migrations table when auto-synchronize owns the schema', async () => {
+    dataSource.options.synchronize = true;
+    await build();
+
+    const report = await service.check();
+
+    // The schema is legitimately absent from `migrations` in this mode, so the
+    // probe must not hold the deployment permanently unready.
+    expect(report.status).toBe('ok');
+    expect(find(report.checks, 'schema').status).toBe('skipped');
+    expect(find(report.checks, 'schema').required).toBe(false);
+  });
+
+  it('should fail the database check rather than hang when a query never settles', async () => {
+    jest.useFakeTimers();
+    dataSource.query.mockImplementation(() => new Promise(() => {}));
+
+    const pending = service.check();
+    await jest.advanceTimersByTimeAsync(4000);
+    const report = await pending;
+    jest.useRealTimers();
+
+    expect(report.status).toBe('error');
+    expect(find(report.checks, 'database').detail).toContain('did not answer');
   });
 
   it('should treat Soroban RPC as optional while no marketplace contract is configured', async () => {

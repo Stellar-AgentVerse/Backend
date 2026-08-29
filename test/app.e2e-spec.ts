@@ -21,6 +21,7 @@ describe('HealthController (e2e)', () => {
   let app: INestApplication<App>;
   const dataSourceMock = {
     query: jest.fn(),
+    options: { synchronize: false },
   };
   const sorobanMock = {
     rpcUrl: 'https://soroban-testnet.stellar.org',
