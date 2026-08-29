@@ -1,12 +1,16 @@
 import { INestApplication, Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { isSimulationAllowed } from './deployment-mode';
 
 const SWAGGER_PATH = 'docs';
 const SWAGGER_TITLE = 'AgentVerse Stellar API';
-const SWAGGER_DESCRIPTION = 'OpenAPI documentation for the AgentVerse Stellar backend.';
+const SWAGGER_DESCRIPTION =
+  'OpenAPI documentation for the AgentVerse Stellar backend.';
 
-export function shouldEnableSwagger(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.NODE_ENV !== 'production' || env.SWAGGER_ENABLED === 'true';
+export function shouldEnableSwagger(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return isSimulationAllowed(env) || env.SWAGGER_ENABLED === 'true';
 }
 
 export function buildSwaggerConfig() {
@@ -26,7 +30,10 @@ export function buildSwaggerConfig() {
     .build();
 }
 
-export function setupSwagger(app: INestApplication, options?: { env?: NodeJS.ProcessEnv }) {
+export function setupSwagger(
+  app: INestApplication,
+  options?: { env?: NodeJS.ProcessEnv },
+) {
   if (!shouldEnableSwagger(options?.env)) {
     return false;
   }

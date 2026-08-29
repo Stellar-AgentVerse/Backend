@@ -119,7 +119,19 @@ describe('PaymentsService', () => {
     );
   });
 
-  it('exposes available providers from the adapter registry', () => {
-    expect(service.getAvailableProviders()).toEqual(['stripe', 'paypal']);
+  it('exposes only providers that are actually configured', () => {
+    stripeAdapter.isConfigured.mockReturnValue(true);
+    paypalAdapter.isConfigured.mockReturnValue(false);
+
+    expect(service.getAvailableProviders()).toEqual(['stripe']);
+  });
+
+  it('reports no providers when none can process a payment', () => {
+    // The expected state in any deployment: neither adapter has a real
+    // integration, so advertising them would be a false capability claim.
+    stripeAdapter.isConfigured.mockReturnValue(false);
+    paypalAdapter.isConfigured.mockReturnValue(false);
+
+    expect(service.getAvailableProviders()).toEqual([]);
   });
 });

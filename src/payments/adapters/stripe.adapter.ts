@@ -1,44 +1,65 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { BasePaymentAdapter } from './base-payment.adapter';
 import { PaymentRequest } from '../common/interfaces/payment-request.interface';
 import { PaymentResult } from '../common/interfaces/payment-result.interface';
 import { RefundRequest } from '../common/interfaces/refund-request.interface';
 
+/**
+ * There is no Stripe SDK in this project and no network call anywhere below:
+ * this adapter has only ever fabricated its results. Previously a non-empty
+ * `STRIPE_API_KEY` was enough to make it report `success: true` with an
+ * invented transaction id, which meant a deployment that merely *looked*
+ * configured produced fake money movement.
+ *
+ * It now runs only when payment simulation is explicitly enabled, which
+ * `validateEnv` permits only when `NODE_ENV` is `development` or `test`.
+ *
+ * The methods are not `async` because none of them awaits anything — which is
+ * precisely the point: no provider is ever contacted.
+ */
 @Injectable()
 export class StripeAdapter extends BasePaymentAdapter {
   private readonly logger = new Logger(StripeAdapter.name);
   private readonly apiKey: string;
-  private readonly isEnabled: boolean;
+  private readonly simulationEnabled: boolean;
 
-  constructor() {
+  constructor(configService: ConfigService) {
     super('stripe');
-    // En producción, obtener de variables de entorno
     this.apiKey = process.env.STRIPE_API_KEY || '';
-    this.isEnabled = !!this.apiKey;
+    this.simulationEnabled =
+      configService.get<boolean>('payments.simulationEnabled') === true;
   }
 
   isConfigured(): boolean {
-    return this.isEnabled;
+    return this.simulationEnabled && !!this.apiKey;
   }
 
-  async processPayment(request: PaymentRequest): Promise<PaymentResult> {
-    try {
-      if (!this.isConfigured()) {
-        return this.createErrorResult('Stripe no está configurado');
-      }
-
-      this.logger.log(`Procesando pago con Stripe: ${JSON.stringify(request)}`);
-
-      // Simulación de llamada a Stripe API
-      // En producción: usar stripe SDK
-      // const stripe = require('stripe')(this.apiKey);
-      // const paymentIntent = await stripe.paymentIntents.create({...});
-
-      const transactionId = `stripe_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-      // Simulación de respuesta exitosa
-      return this.createSuccessResult(
+  /** Null when the adapter may proceed; otherwise the refusal to return. */
+  private refusal(transactionId?: string): PaymentResult | null {
+    if (!this.simulationEnabled) {
+      return this.createSimulationDisabledResult(transactionId);
+    }
+    if (!this.apiKey) {
+      return this.createErrorResult(
+        'Stripe no está configurado',
         transactionId,
+      );
+    }
+    return null;
+  }
+
+  processPayment(request: PaymentRequest): Promise<PaymentResult> {
+    const refused = this.refusal();
+    if (refused) return Promise.resolve(refused);
+
+    this.logger.warn(
+      `[SIMULATED] Procesando pago con Stripe por ${request.amount} ${request.currency}`,
+    );
+
+    return Promise.resolve(
+      this.createSimulatedResult(
+        `stripe_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
         request.amount,
         request.currency,
         {
@@ -46,29 +67,21 @@ export class StripeAdapter extends BasePaymentAdapter {
           customer: request.customer,
           rawResponse: 'Stripe payment simulated',
         },
-      );
-    } catch (error) {
-      this.logger.error(`Error procesando pago con Stripe: ${error.message}`);
-      return this.createErrorResult(error.message);
-    }
+      ),
+    );
   }
 
-  async processRefund(request: RefundRequest): Promise<PaymentResult> {
-    try {
-      if (!this.isConfigured()) {
-        return this.createErrorResult('Stripe no está configurado');
-      }
+  processRefund(request: RefundRequest): Promise<PaymentResult> {
+    const refused = this.refusal(request.transactionId);
+    if (refused) return Promise.resolve(refused);
 
-      this.logger.log(`Procesando reembolso con Stripe: ${JSON.stringify(request)}`);
+    this.logger.warn(
+      `[SIMULATED] Procesando reembolso con Stripe: ${request.transactionId}`,
+    );
 
-      // Simulación de llamada a Stripe API
-      // const stripe = require('stripe')(this.apiKey);
-      // const refund = await stripe.refunds.create({...});
-
-      const refundId = `stripe_refund_${Date.now()}`;
-
-      return this.createSuccessResult(
-        refundId,
+    return Promise.resolve(
+      this.createSimulatedResult(
+        `stripe_refund_${Date.now()}`,
         request.amount || 0,
         'USD',
         {
@@ -76,37 +89,24 @@ export class StripeAdapter extends BasePaymentAdapter {
           reason: request.reason,
           rawResponse: 'Stripe refund simulated',
         },
-      );
-    } catch (error) {
-      this.logger.error(`Error procesando reembolso con Stripe: ${error.message}`);
-      return this.createErrorResult(error.message, request.transactionId);
-    }
+      ),
+    );
   }
 
-  async verifyTransaction(transactionId: string): Promise<PaymentResult> {
-    try {
-      if (!this.isConfigured()) {
-        return this.createErrorResult('Stripe no está configurado');
-      }
+  verifyTransaction(transactionId: string): Promise<PaymentResult> {
+    const refused = this.refusal(transactionId);
+    if (refused) return Promise.resolve(refused);
 
-      this.logger.log(`Verificando transacción Stripe: ${transactionId}`);
+    this.logger.warn(
+      `[SIMULATED] Verificando transacción Stripe: ${transactionId}`,
+    );
 
-      // Simulación de verificación
-      // const stripe = require('stripe')(this.apiKey);
-      // const paymentIntent = await stripe.paymentIntents.retrieve(transactionId);
-
-      return this.createSuccessResult(
-        transactionId,
-        0, // En producción obtener del payment intent
-        'USD',
-        {
-          status: 'verified',
-          rawResponse: 'Stripe verification simulated',
-        },
-      );
-    } catch (error) {
-      this.logger.error(`Error verificando transacción Stripe: ${error.message}`);
-      return this.createErrorResult(error.message, transactionId);
-    }
+    return Promise.resolve(
+      this.createSuccessResult(transactionId, 0, 'USD', {
+        status: 'verified',
+        rawResponse: 'Stripe verification simulated',
+        simulated: true,
+      }),
+    );
   }
 }

@@ -9,8 +9,6 @@ import {
   AssetSpec,
   Wallet,
   CreditPackage,
-  WalletTransaction,
-  TransactionType,
   ActivityLog,
   Tag,
   AssetType,
@@ -198,23 +196,17 @@ export async function seedDatabase(dataSource: DataSource): Promise<void> {
   ]);
 
   // --- Wallet for creator ---
+  // No xlmBalance and no wallet transactions are seeded. Both were fabricated:
+  // nothing reads a real Stellar balance, and the transaction fixtures carried
+  // txids shaped like on-chain hashes ('0x82f...e31') for movements that never
+  // happened. A development fixture must not manufacture money either.
   const walletRepo = dataSource.getRepository(Wallet);
-  const wallet = await walletRepo.save({
+  await walletRepo.save({
     userPublicKey: creatorPk,
     credits: 450,
-    xlmBalance: 1240.45,
     monthlyUsage: 67,
     monthlyAllocation: 100,
   });
-
-  // --- Transactions ---
-  const txRepo = dataSource.getRepository(WalletTransaction);
-  await txRepo.save([
-    { walletId: wallet.id, type: TransactionType.PURCHASE, description: 'Marketplace: Data Aggregator V2', txid: '0x82f...e31', amount: -120, createdAt: new Date('2023-10-24') },
-    { walletId: wallet.id, type: TransactionType.INCOME, description: 'Agent Revenue: Neural-Search-Bot', txid: '0x41a...b2c', amount: 45.50, createdAt: new Date('2023-10-23') },
-    { walletId: wallet.id, type: TransactionType.FEE, description: 'Network Maintenance Fee', txid: '0x111...789', amount: -0.50, createdAt: new Date('2023-10-22') },
-    { walletId: wallet.id, type: TransactionType.REFILL, description: 'Resource Refill: Starter Pack', txid: '0x902...a4e', amount: 500, createdAt: new Date('2023-10-20') },
-  ]);
 
   logger.log(`Database seeded with ${assets.length} assets, tags, packages, and sample data.`);
 }

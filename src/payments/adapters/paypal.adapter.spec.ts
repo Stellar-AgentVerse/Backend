@@ -1,70 +1,94 @@
+import { ConfigService } from '@nestjs/config';
 import { PayPalAdapter } from './paypal.adapter';
+import { SIMULATED_ID_PREFIX } from './base-payment.adapter';
+
+const configWithSimulation = (enabled: boolean) =>
+  ({
+    get: jest.fn((key: string) =>
+      key === 'payments.simulationEnabled' ? enabled : undefined,
+    ),
+  }) as unknown as ConfigService;
 
 describe('PayPalAdapter', () => {
   const originalClientId = process.env.PAYPAL_CLIENT_ID;
-  const originalClientSecret = process.env.PAYPAL_CLIENT_SECRET;
-  const originalEnv = process.env.PAYPAL_ENV;
+  const originalSecret = process.env.PAYPAL_CLIENT_SECRET;
 
   afterEach(() => {
     if (originalClientId === undefined) delete process.env.PAYPAL_CLIENT_ID;
     else process.env.PAYPAL_CLIENT_ID = originalClientId;
 
-    if (originalClientSecret === undefined) delete process.env.PAYPAL_CLIENT_SECRET;
-    else process.env.PAYPAL_CLIENT_SECRET = originalClientSecret;
-
-    if (originalEnv === undefined) delete process.env.PAYPAL_ENV;
-    else process.env.PAYPAL_ENV = originalEnv;
+    if (originalSecret === undefined) delete process.env.PAYPAL_CLIENT_SECRET;
+    else process.env.PAYPAL_CLIENT_SECRET = originalSecret;
 
     jest.restoreAllMocks();
   });
 
-  it('returns an error result when PayPal is not configured', async () => {
+  it('is not configured without credentials', () => {
     delete process.env.PAYPAL_CLIENT_ID;
     delete process.env.PAYPAL_CLIENT_SECRET;
-    const adapter = new PayPalAdapter();
 
-    await expect(
-      adapter.processRefund({ transactionId: 'tx-1', reason: 'duplicate' }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        success: false,
-        provider: 'paypal',
-        error: 'PayPal no está configurado',
-      }),
+    expect(new PayPalAdapter(configWithSimulation(true)).isConfigured()).toBe(
+      false,
     );
   });
 
-  it('returns a simulated success result when PayPal is configured', async () => {
-    process.env.PAYPAL_CLIENT_ID = 'client-id';
-    process.env.PAYPAL_CLIENT_SECRET = 'client-secret';
-    process.env.PAYPAL_ENV = 'production';
-    jest.spyOn(Date, 'now').mockReturnValue(1704067200000);
-    jest.spyOn(Math, 'random').mockReturnValue(0.987654321);
-    const adapter = new PayPalAdapter();
-
-    const result = await adapter.processPayment({
-      amount: 18,
-      currency: 'USD',
-      provider: 'paypal' as never,
-      description: 'Checkout',
-      customer: { name: 'Alice' },
+  describe('when payment simulation is disabled', () => {
+    beforeEach(() => {
+      process.env.PAYPAL_CLIENT_ID = 'live-client-id';
+      process.env.PAYPAL_CLIENT_SECRET = 'live-client-secret';
     });
 
-    expect(result).toEqual(
-      expect.objectContaining({
-        success: true,
-        transactionId: expect.stringMatching(/^paypal_1704067200000_/),
-        amount: 18,
+    it('is not configured even with credentials present', () => {
+      expect(
+        new PayPalAdapter(configWithSimulation(false)).isConfigured(),
+      ).toBe(false);
+    });
+
+    it('refuses payment without inventing a transaction id', async () => {
+      const adapter = new PayPalAdapter(configWithSimulation(false));
+
+      const result = await adapter.processPayment({
+        amount: 15,
         currency: 'USD',
         provider: 'paypal',
-        metadata: expect.objectContaining({
-          description: 'Checkout',
-          customer: { name: 'Alice' },
-          environment: 'production',
-          rawResponse: 'PayPal payment simulated',
-        }),
-      }),
-    );
-    expect(result.timestamp).toBeInstanceOf(Date);
+      } as never);
+
+      expect(result.success).toBe(false);
+      expect(result.transactionId).toBe('N/A');
+      expect(result.error).toContain('Payment simulation is disabled');
+    });
+
+    it('refuses refunds and verification too', async () => {
+      const adapter = new PayPalAdapter(configWithSimulation(false));
+
+      await expect(
+        adapter.processRefund({ transactionId: 'tx-1' } as never),
+      ).resolves.toMatchObject({ success: false });
+      await expect(adapter.verifyTransaction('tx-1')).resolves.toMatchObject({
+        success: false,
+      });
+    });
+  });
+
+  describe('when payment simulation is enabled', () => {
+    beforeEach(() => {
+      process.env.PAYPAL_CLIENT_ID = 'test-client-id';
+      process.env.PAYPAL_CLIENT_SECRET = 'test-client-secret';
+    });
+
+    it('marks the fabricated result as simulated', async () => {
+      const adapter = new PayPalAdapter(configWithSimulation(true));
+
+      const result = await adapter.processPayment({
+        amount: 15,
+        currency: 'USD',
+        provider: 'paypal',
+        description: 'Checkout',
+      } as never);
+
+      expect(result.success).toBe(true);
+      expect(result.transactionId.startsWith(SIMULATED_ID_PREFIX)).toBe(true);
+      expect(result.metadata).toMatchObject({ simulated: true });
+    });
   });
 });

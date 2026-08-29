@@ -55,7 +55,10 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-agentverse}
       DB_SYNCHRONIZE: ${DB_SYNCHRONIZE:-true}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret}
+      # No default. This stack defaults NODE_ENV to production, and wallet
+      # identity is derived from the JWT, so falling back to the published
+      # 'dev-secret' would let anyone mint a token for any wallet.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       PORT: 3000
       STELLAR_NETWORK: ${STELLAR_NETWORK:-testnet}
       STELLAR_RPC_URL: ${STELLAR_RPC_URL:-https://soroban-testnet.stellar.org}

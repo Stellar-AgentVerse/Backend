@@ -61,7 +61,7 @@ describe('seedDatabase', () => {
     expect(dataSource.getRepository).not.toHaveBeenCalled();
   });
 
-  it('seeds packages, assets, metrics, logs, wallet, and transactions when empty', async () => {
+  it('seeds packages, assets, metrics, logs and a wallet when empty', async () => {
     const pkgRepo = createRepo();
     const tagRepo = createRepo();
     const assetRepo = createRepo();
@@ -153,10 +153,12 @@ describe('seedDatabase', () => {
       expect.objectContaining({ event: 'Execution Success', asset: 'CYBERORACLE-V2' }),
       expect.objectContaining({ event: 'Model Update', asset: 'AURA-7-RESEARCH-INTEL' }),
     ]));
-    expect(walletRepo.save).toHaveBeenCalledWith(expect.objectContaining({ userPublicKey: expect.any(String), credits: 450 }));
-    expect(txRepo.save).toHaveBeenCalledWith(expect.arrayContaining([
-      expect.objectContaining({ description: 'Marketplace: Data Aggregator V2', amount: -120 }),
-      expect.objectContaining({ description: 'Resource Refill: Starter Pack', amount: 500 }),
-    ]));
+    // No xlmBalance and no wallet transactions are seeded: both were fabricated
+    // money that a development fixture must not manufacture.
+    const [savedWallet] = walletRepo.save.mock.calls[0] as [Record<string, unknown>];
+    expect(savedWallet.userPublicKey).toEqual(expect.any(String));
+    expect(savedWallet.credits).toBe(450);
+    expect(savedWallet).not.toHaveProperty('xlmBalance');
+    expect(txRepo.save).not.toHaveBeenCalled();
   });
 });
