@@ -19,6 +19,9 @@ RUN chmod +x /app/entrypoint.sh && \
     chown -R appuser:appgroup /app
 USER appuser
 EXPOSE 3000
+# /api/health is dependency-aware and answers 503 when the database or schema is
+# unavailable, so an unhealthy container now means something. Restart-only probes
+# should target /api/health/live instead.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 ENTRYPOINT ["/app/entrypoint.sh"]
