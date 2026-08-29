@@ -15,6 +15,9 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * The same class of drift applies to `asset_type_enum`, which was created with
  * four values while `AssetType` declares six.
+ *
+ * It does not touch purchases."transactionHash", whose width differs from the
+ * entity for a reason recorded at the end of up().
  */
 const UUID_PRIMARY_KEY_TABLES = [
   'activity_logs',
@@ -54,21 +57,15 @@ export class AlignMigratedSchemaWithEntities1700000004000 implements MigrationIn
       );
     }
 
-    // Purchase.transactionHash is varchar(64); 1700000001000 created it as
-    // varchar(128). A Stellar transaction hash is 64 hex characters, so no
-    // stored value can exceed the narrower width. Left as-is, a later
-    // `synchronize` run would reconcile this by dropping and re-adding the
-    // column, which would discard the hashes the replay guard depends on.
-    await queryRunner.query(
-      `ALTER TABLE "purchases" ALTER COLUMN "transactionHash" TYPE varchar(64)`,
-    );
+    // purchases."transactionHash" is deliberately left at the varchar(128)
+    // 1700000001000 created it with, even though the entity declares
+    // varchar(64). ConfirmPurchaseDto accepts 32-128 characters with no hex or
+    // exact-length check, so narrowing the column converts a malformed hash
+    // from a rejected request into a 22001 error inside confirm() — a 500
+    // where a 400 belongs. Narrow it together with the DTO, not before.
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `ALTER TABLE "purchases" ALTER COLUMN "transactionHash" TYPE varchar(128)`,
-    );
-
     for (const table of UUID_PRIMARY_KEY_TABLES) {
       await queryRunner.query(
         `ALTER TABLE "${table}" ALTER COLUMN "id" DROP DEFAULT`,
