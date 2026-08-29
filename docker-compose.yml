@@ -19,6 +19,9 @@ services:
       timeout: 5s
       retries: 5
 
+  # Reserved for the encrypted prompt blob store. No application code imports
+  # @aws-sdk/client-s3 yet, so the api service does not wait on it; gating
+  # startup on a bucket nothing reads only adds a way for a clean deploy to hang.
   minio:
     image: minio/minio:latest
     container_name: agentverse-storage
@@ -54,7 +57,10 @@ services:
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-agentverse}
-      DB_SYNCHRONIZE: ${DB_SYNCHRONIZE:-true}
+      # The schema is applied by entrypoint.sh via migration:run, not by
+      # TypeORM auto-synchronize. Auto-sync against a migrated database silently
+      # rewrites columns and indexes.
+      DB_SYNCHRONIZE: ${DB_SYNCHRONIZE:-false}
       JWT_SECRET: ${JWT_SECRET:-dev-secret}
       PORT: 3000
       STELLAR_NETWORK: ${STELLAR_NETWORK:-testnet}
@@ -63,8 +69,6 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
     depends_on:
       postgres:
-        condition: service_healthy
-      minio:
         condition: service_healthy
     entrypoint: [ "/app/entrypoint.sh" ]
 
