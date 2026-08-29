@@ -1,6 +1,26 @@
 import { AppEnv, DEV_DEFAULTS } from './env.schema';
+import {
+  describeEnvironment,
+  isSimulationAllowed,
+  SIMULATION_ALLOWED_ENVIRONMENTS,
+} from './deployment-mode';
 
 let validatedEnvCache: AppEnv | null = null;
+
+/**
+ * Flags that put fabricated state into the running system: a payment adapter
+ * reporting success without a settlement, or the seed writing demo assets and
+ * credits. A deployment that is not explicitly development or test must not
+ * boot with any of them enabled.
+ */
+const SIMULATION_FLAGS = [
+  'PAYMENT_SIMULATION_ENABLED',
+  'MOCK_PAYMENT_ENABLED',
+  'MOCK_PAYMENT_FAIL',
+  // The seed writes demo assets and a 450-credit wallet. That is fabricated
+  // state, so it belongs to the same gate as fabricated payments.
+  'DB_SEED_ON_STARTUP',
+] as const;
 
 const REQUIRED_IN_PRODUCTION = {
   db: ['DB_HOST', 'DB_PORT', 'DB_USERNAME', 'DB_PASSWORD', 'DB_NAME'] as const,
@@ -96,8 +116,45 @@ function ensureProductionRequirement(env: NodeJS.ProcessEnv, key: string) {
   }
 }
 
+function ensureDeploymentRequirement(env: NodeJS.ProcessEnv, key: string) {
+  if (env[key] === undefined || env[key]?.trim() === '') {
+    throw new Error(
+      `${key} is required when NODE_ENV is "${describeEnvironment(env)}". ` +
+        `Development fallbacks apply only when NODE_ENV is one of: ` +
+        `${SIMULATION_ALLOWED_ENVIRONMENTS.join(', ')}.`,
+    );
+  }
+}
+
+function ensureSimulationIsDisabled(env: NodeJS.ProcessEnv) {
+  for (const key of SIMULATION_FLAGS) {
+    if (parseBoolean(env[key], false, key)) {
+      throw new Error(
+        `${key} must be disabled when NODE_ENV is "${describeEnvironment(env)}". ` +
+          `Fabricated payments and seed data are only permitted when NODE_ENV ` +
+          `is one of: ${SIMULATION_ALLOWED_ENVIRONMENTS.join(', ')}.`,
+      );
+    }
+  }
+}
+
 export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
   const isProduction = env.NODE_ENV === 'production';
+  const simulationAllowed = isSimulationAllowed(env);
+
+  // Checked before the production block so that staging — which is not
+  // `production` and so satisfies none of the rules below — still fails closed.
+  if (!simulationAllowed) {
+    ensureSimulationIsDisabled(env);
+
+    // Wallet identity is derived solely from the JWT, so a signing key that
+    // falls back to the published `dev-secret` would let anyone mint a token
+    // for any wallet. Required in every real deployment, not only
+    // `NODE_ENV=production`. Production keeps its own wording below.
+    if (!isProduction) {
+      ensureDeploymentRequirement(env, REQUIRED_IN_PRODUCTION.jwt[0]);
+    }
+  }
 
   if (isProduction) {
     ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.jwt[0]);
@@ -124,7 +181,7 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
       database: env.DB_NAME ?? DEV_DEFAULTS.db.database,
       synchronize: parseBoolean(
         env.DB_SYNCHRONIZE,
-        isProduction ? false : DEV_DEFAULTS.db.synchronize,
+        simulationAllowed ? DEV_DEFAULTS.db.synchronize : false,
         'DB_SYNCHRONIZE',
       ),
       logging: parseBoolean(
@@ -134,7 +191,7 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
       ),
       seedOnStartup: parseBoolean(
         env.DB_SEED_ON_STARTUP,
-        !isProduction,
+        simulationAllowed,
         'DB_SEED_ON_STARTUP',
       ),
     },
@@ -162,10 +219,27 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
       adminSecretKey:
         env.STELLAR_ADMIN_SECRET_KEY ?? DEV_DEFAULTS.stellar.adminSecretKey,
     },
-    corsOrigins: parseCorsOrigins(env.CORS_ORIGINS, !isProduction),
+    corsOrigins: parseCorsOrigins(env.CORS_ORIGINS, simulationAllowed),
     aws: {
       region: env.AWS_REGION ?? DEV_DEFAULTS.aws.region,
       keyId: env.AWS_KMS_KEY_ID,
+    },
+    payments: {
+      // Guaranteed false outside development/test by ensureSimulationIsDisabled
+      // above; recomputed here so consumers read one validated value rather
+      // than three raw environment variables.
+      simulationEnabled:
+        simulationAllowed &&
+        (parseBoolean(
+          env.PAYMENT_SIMULATION_ENABLED,
+          DEV_DEFAULTS.payments.simulationEnabled,
+          'PAYMENT_SIMULATION_ENABLED',
+        ) ||
+          parseBoolean(
+            env.MOCK_PAYMENT_ENABLED,
+            DEV_DEFAULTS.payments.simulationEnabled,
+            'MOCK_PAYMENT_ENABLED',
+          )),
     },
   };
 

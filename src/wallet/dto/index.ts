@@ -1,7 +1,11 @@
 export {
   WalletBalanceDto,
+  OnChainBalanceDto,
+  OnChainBalanceStatus,
   CreditPackageDto,
+  CreditPackagesDto,
+  PurchaseCapabilityDto,
   WalletTransactionDto,
-  PurchaseResultDto,
+  PurchasePackageDto,
+  STELLAR_BALANCE_NOT_INTEGRATED,
 } from './wallet-response.dto';
-export { PurchasePackageDto } from './wallet-response.dto';

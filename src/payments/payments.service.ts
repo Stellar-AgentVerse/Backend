@@ -3,6 +3,7 @@ import { CreatePaymentDto } from './common/dto/create-payment.dto';
 import { CreateRefundDto } from './common/dto/create-refund.dto';
 import { PaymentResult } from './common/interfaces/payment-result.interface';
 import { IPaymentAdapter } from './adapters/interface/payment-adapter.interface';
+import { PaymentProvider } from './common/interfaces/payment-request.interface';
 import { StripeAdapter } from './adapters/stripe.adapter';
 import { PayPalAdapter } from './adapters/paypal.adapter';
 
@@ -40,7 +41,7 @@ export class PaymentsService {
     return adapter.processPayment({
       amount: createPaymentDto.amount,
       currency: createPaymentDto.currency,
-      provider: selectedProvider as any, // Cast por si el enum difiere string
+      provider: selectedProvider as PaymentProvider,
       description: createPaymentDto.description,
       customer: createPaymentDto.customer,
       metadata: createPaymentDto.metadata,
@@ -63,8 +64,15 @@ export class PaymentsService {
     });
   }
 
+  /**
+   * Only providers that are actually usable right now. Previously this listed
+   * every registered adapter unconditionally, which advertised Stripe and
+   * PayPal as available in a deployment where neither can process anything.
+   */
   getAvailableProviders(): string[] {
-    return Object.keys(this.adapters);
+    return Object.entries(this.adapters)
+      .filter(([, adapter]) => adapter.isConfigured())
+      .map(([name]) => name);
   }
 
   async verifyTransaction(transactionId: string, provider: string): Promise<PaymentResult> {

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { BasePaymentAdapter } from './base-payment.adapter';
 import { PaymentRequest } from '../common/interfaces/payment-request.interface';
 import { PaymentResult } from '../common/interfaces/payment-result.interface';
@@ -7,30 +8,35 @@ import { RefundRequest } from '../common/interfaces/refund-request.interface';
 /**
  * Ejemplo de un adapter personalizado para demostrar la extensibilidad del sistema.
  * Este es un adapter mock que puede usarse para testing o desarrollo.
- * 
- * Para activar este adapter:
- * 1. Agregar MockPaymentAdapter a los providers en payments.module.ts
- * 2. Registrarlo en el factory PAYMENT_ADAPTERS_SETUP
- * 3. Configurar MOCK_PAYMENT_ENABLED=true en variables de entorno
+ *
+ * Enabled by `MOCK_PAYMENT_ENABLED=true` (or `PAYMENT_SIMULATION_ENABLED=true`),
+ * which `validateEnv` accepts only when `NODE_ENV` is `development` or `test`.
+ * Outside those environments the application refuses to boot with the flag set,
+ * and this adapter refuses to fabricate a result regardless.
  */
 @Injectable()
 export class MockPaymentAdapter extends BasePaymentAdapter {
   private readonly logger = new Logger(MockPaymentAdapter.name);
-  private readonly isEnabled: boolean;
+  private readonly simulationEnabled: boolean;
   private readonly shouldFail: boolean;
 
-  constructor() {
+  constructor(configService: ConfigService) {
     super('mock');
-    this.isEnabled = process.env.MOCK_PAYMENT_ENABLED === 'true';
+    this.simulationEnabled =
+      configService.get<boolean>('payments.simulationEnabled') === true;
     this.shouldFail = process.env.MOCK_PAYMENT_FAIL === 'true';
   }
 
   isConfigured(): boolean {
-    return this.isEnabled;
+    return this.simulationEnabled;
   }
 
   async processPayment(request: PaymentRequest): Promise<PaymentResult> {
-    this.logger.log(`[MOCK] Procesando pago: ${JSON.stringify(request)}`);
+    if (!this.simulationEnabled) {
+      return this.createSimulationDisabledResult();
+    }
+
+    this.logger.warn(`[MOCK] Procesando pago: ${JSON.stringify(request)}`);
 
     // Simular delay de red
     await this.delay(500);
@@ -39,10 +45,8 @@ export class MockPaymentAdapter extends BasePaymentAdapter {
       return this.createErrorResult('Mock payment configured to fail');
     }
 
-    const transactionId = `mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    return this.createSuccessResult(
-      transactionId,
+    return this.createSimulatedResult(
+      `mock_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
       request.amount,
       request.currency,
       {
@@ -54,18 +58,23 @@ export class MockPaymentAdapter extends BasePaymentAdapter {
   }
 
   async processRefund(request: RefundRequest): Promise<PaymentResult> {
-    this.logger.log(`[MOCK] Procesando reembolso: ${JSON.stringify(request)}`);
+    if (!this.simulationEnabled) {
+      return this.createSimulationDisabledResult(request.transactionId);
+    }
+
+    this.logger.warn(`[MOCK] Procesando reembolso: ${JSON.stringify(request)}`);
 
     await this.delay(500);
 
     if (this.shouldFail) {
-      return this.createErrorResult('Mock refund configured to fail', request.transactionId);
+      return this.createErrorResult(
+        'Mock refund configured to fail',
+        request.transactionId,
+      );
     }
 
-    const refundId = `mock_refund_${Date.now()}`;
-
-    return this.createSuccessResult(
-      refundId,
+    return this.createSimulatedResult(
+      `mock_refund_${Date.now()}`,
       request.amount || 0,
       'USD',
       {
@@ -77,30 +86,33 @@ export class MockPaymentAdapter extends BasePaymentAdapter {
   }
 
   async verifyTransaction(transactionId: string): Promise<PaymentResult> {
-    this.logger.log(`[MOCK] Verificando transacción: ${transactionId}`);
+    if (!this.simulationEnabled) {
+      return this.createSimulationDisabledResult(transactionId);
+    }
+
+    this.logger.warn(`[MOCK] Verificando transacción: ${transactionId}`);
 
     await this.delay(300);
 
     if (this.shouldFail) {
-      return this.createErrorResult('Mock verification configured to fail', transactionId);
+      return this.createErrorResult(
+        'Mock verification configured to fail',
+        transactionId,
+      );
     }
 
-    return this.createSuccessResult(
-      transactionId,
-      0,
-      'USD',
-      {
-        status: 'verified',
-        mockNote: 'This is a simulated verification for testing purposes',
-        verified: true,
-      },
-    );
+    return this.createSuccessResult(transactionId, 0, 'USD', {
+      status: 'verified',
+      mockNote: 'This is a simulated verification for testing purposes',
+      verified: true,
+      simulated: true,
+    });
   }
 
   /**
    * Helper para simular delay de red
    */
   private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

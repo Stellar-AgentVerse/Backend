@@ -33,12 +33,22 @@ export interface AwsEnv {
   keyId?: string;
 }
 
+export interface PaymentsEnv {
+  /**
+   * Whether the Stripe/PayPal/mock adapters may fabricate a successful
+   * payment result. Only ever true in development and test; `validateEnv`
+   * refuses to boot a real deployment with it enabled.
+   */
+  simulationEnabled: boolean;
+}
+
 export interface AppEnv {
   db: DatabaseEnv;
   jwt: JwtEnv;
   stellar: StellarEnv;
   corsOrigins: string[];
   aws: AwsEnv;
+  payments: PaymentsEnv;
 }
 
 export const DEV_DEFAULTS = {
@@ -70,5 +80,8 @@ export const DEV_DEFAULTS = {
   corsOrigins: ['*'],
   aws: {
     region: 'us-east-1',
+  },
+  payments: {
+    simulationEnabled: false,
   },
 } as const;

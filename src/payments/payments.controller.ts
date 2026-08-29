@@ -1,5 +1,6 @@
-import { Controller, Post, Body, Get, Param, Query, Logger } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Controller, Post, Body, Get, Param, Query, Logger, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './common/dto/create-payment.dto';
 import { CreateRefundDto } from './common/dto/create-refund.dto';
@@ -17,7 +18,10 @@ export class PaymentsController {
      * Procesar un nuevo pago
      */
     @Post()
-    @ApiOperation({ summary: 'Create a payment' })
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Create a payment (JWT required)' })
+    @ApiResponse({ status: 401, description: 'Missing, malformed or expired token' })
     @ApiBody({ type: CreatePaymentDto })
     @ApiResponse({ status: 201, description: 'Payment processed', type: PaymentResult })
     async createPayment(
@@ -34,7 +38,10 @@ export class PaymentsController {
      * Procesar un reembolso
      */
     @Post('refund')
-    @ApiOperation({ summary: 'Create a refund' })
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Create a refund (JWT required)' })
+    @ApiResponse({ status: 401, description: 'Missing, malformed or expired token' })
     @ApiBody({ type: CreateRefundDto })
     @ApiResponse({ status: 201, description: 'Refund processed', type: PaymentResult })
     async createRefund(
@@ -51,7 +58,10 @@ export class PaymentsController {
      * Verificar el estado de una transacción
      */
     @Get('verify/:transactionId')
-    @ApiOperation({ summary: 'Verify a payment transaction' })
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Verify a payment transaction (JWT required)' })
+    @ApiResponse({ status: 401, description: 'Missing, malformed or expired token' })
     @ApiParam({ name: 'transactionId', example: 'tx_123' })
     @ApiQuery({ name: 'provider', required: false, example: PaymentProvider.STRIPE })
     async verifyTransaction(
@@ -63,10 +73,12 @@ export class PaymentsController {
     }
 
     /**
-     * Obtener proveedores de pago disponibles
+     * Obtener proveedores de pago disponibles.
+     * Public capability probe: an empty list means no provider can currently
+     * process a payment, which is the expected state in any deployment.
      */
     @Get('providers')
-    @ApiOperation({ summary: 'List available payment providers' })
+    @ApiOperation({ summary: 'List payment providers that are currently usable' })
     getProviders(): { providers: string[] } {
         const providers = this.paymentsService.getAvailableProviders();
         return { providers };

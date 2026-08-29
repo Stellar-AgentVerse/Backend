@@ -54,11 +54,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
-
       - name: Test
         run: npm test
 
+      # The jest config in package.json sets rootDir to "src", so `npm test`
+      # never picks up anything under test/. Without this step the wallet
+      # authorization and payment fail-closed integration tests would not run
+      # in CI at all.
+      - name: E2E test
+        run: npm run test:e2e
+
       - name: Build
         run: npm run build
+
+      # Lint runs last, and still fails the job. It used to run first, and
+      # because `npm run lint` currently exits non-zero on a clean checkout of
+      # main, every run stopped here with Test and Build reported as skipped.
+      # Moving it does not weaken the gate; it means the test and build results
+      # are visible even while the pre-existing lint debt is outstanding.
+      - name: Lint
+        run: npm run lint
