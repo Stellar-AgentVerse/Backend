@@ -60,11 +60,12 @@ jobs:
       STELLAR_NETWORK: testnet
       STELLAR_RPC_URL: https://soroban-testnet.stellar.org
       STELLAR_NETWORK_PASSPHRASE: Test SDF Network ; September 2015
-      # No SOROBAN_MARKETPLACE_CONTRACT_ID and no STELLAR_ADMIN_SECRET_KEY are set
-      # anywhere in this workflow. That is intentional on both counts: it keeps
-      # long-lived signing keys out of CI, and it proves the application boots
-      # without one. A configured environment is exercised by running this suite
-      # against real staging (see docs/release-runbook.md).
+      # No long-lived signing key and no real contract id are configured here, and
+      # neither is stored as a secret. The smoke suite runs with none at all; the
+      # boot step alone exports a throwaway keypair it generates in-process and
+      # never signs with, plus PLACEHOLDER contract ids, because production env
+      # validation requires those variables to be present. See
+      # docs/release-runbook.md for what a configured environment needs.
 
     steps:
       - name: Checkout
@@ -122,8 +123,11 @@ jobs:
           set -euo pipefail
           # Generated per run, never written to a file, never echoed, never
           # persisted. env.validation.ts requires the variable in production;
-          # this run never signs anything with it.
-          export STELLAR_ADMIN_SECRET_KEY="$(node -e "console.log(require('@stellar/stellar-sdk').Keypair.random().secret())")"
+          # this run never signs anything with it. Masked so it cannot appear in
+          # the log even if something downstream decides to print its environment.
+          STELLAR_ADMIN_SECRET_KEY="$(node -e "console.log(require('@stellar/stellar-sdk').Keypair.random().secret())")"
+          echo "::add-mask::$STELLAR_ADMIN_SECRET_KEY"
+          export STELLAR_ADMIN_SECRET_KEY
           # Required by the same validator. Nothing in this run calls KMS; a real
           # environment supplies the deployed key id.
           export AWS_KMS_KEY_ID="alias/agentverse-staging"

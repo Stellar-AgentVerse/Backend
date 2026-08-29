@@ -26,8 +26,13 @@ Environment validation is centralized in `src/config/env.validation.ts`.
 ```bash
 npm ci
 cp .env.example .env
+npm run migration:run
 npm run start:dev
 ```
+
+`.env.example` sets `DB_SYNCHRONIZE=false`, so the schema comes from migrations
+here exactly as it does in a deployment. Until they are applied, `/api/health`
+reports the missing schema and answers 503.
 
 ## Docker
 
@@ -96,7 +101,7 @@ Docs use bearer auth and stay disabled in production unless `SWAGGER_ENABLED=tru
 | `DB_USERNAME` | `postgres` | Database user |
 | `DB_PASSWORD` | `postgres` | Database password |
 | `DB_NAME` | `agentverse` | Database name |
-| `DB_SYNCHRONIZE` | `true` in dev, `false` in prod and in Docker Compose | TypeORM schema sync. Keep `false` wherever migrations own the schema |
+| `DB_SYNCHRONIZE` | `false` in `.env.example`; `false` in prod | TypeORM schema sync. Keep `false` wherever migrations own the schema — Compose interpolates `.env`, so this file decides what the container gets |
 | `DB_LOGGING` | `false` | TypeORM SQL logging |
 | `JWT_SECRET` | `dev-secret` in dev | JWT signing secret |
 | `JWT_EXPIRES_IN` | `24h` | JWT token lifetime |

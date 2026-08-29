@@ -21,12 +21,18 @@ Migrations are the only mechanism that builds the deployed schema.
 - `entrypoint.sh` applies migrations before starting the process and aborts the
   boot if any fails, so a clean deploy provisions itself and never serves traffic
   on a half-built schema.
-- `docker-compose.yml` defaults `DB_SYNCHRONIZE` to `false`.
+- `docker-compose.yml` defaults `DB_SYNCHRONIZE` to `false`, and `.env.example`
+  sets it to `false` too: Compose interpolates that file, so it is the one that
+  decides what the container receives.
 - A migration aligns the existing schema with the entities, and the staging smoke
   suite asserts there is no remaining drift that changes what the database can
-  store. Identifier-only differences — index, foreign-key and enum type names —
-  are tolerated: the migrations name them explicitly while TypeORM derives hashed
-  names, and neither affects a deployment running with `synchronize: false`.
+  store, for the entities registered in `DatabaseModule`. Identifier-only
+  differences — index, foreign-key and enum type names — are tolerated: the
+  migrations name them explicitly while TypeORM derives hashed names, and neither
+  affects a deployment running with `synchronize: false`. Two gaps are known and
+  recorded in the spec rather than implied away: an entity absent from that array
+  is invisible to the guard, as `token_transactions` is today, and
+  `purchases."transactionHash"` is deliberately left wider than the entity.
 
 ## Consequences
 - A schema change that is not expressed as a migration fails the smoke suite
