@@ -19,6 +19,7 @@ import {
   DeliveryCommandEntity,
   DeliveryResultEntity,
   DeliveryOutboxEntity,
+  PromptPublication,
 } from './entities';
 
 const entities = [
@@ -38,6 +39,7 @@ const entities = [
   DeliveryCommandEntity,
   DeliveryResultEntity,
   DeliveryOutboxEntity,
+  PromptPublication,
 ];
 
 @Global()

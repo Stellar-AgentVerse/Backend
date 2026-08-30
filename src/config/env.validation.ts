@@ -15,6 +15,7 @@ const REQUIRED_IN_PRODUCTION = {
     'STELLAR_ADMIN_SECRET_KEY',
   ] as const,
   cors: ['CORS_ORIGINS'] as const,
+  publication: ['PROMPT_PUBLICATION_OPERATOR_KEYS'] as const,
   aws: ['AWS_REGION', 'AWS_KMS_KEY_ID'] as const,
 };
 
@@ -90,6 +91,29 @@ function parseCorsOrigins(
   return [...new Set(origins)];
 }
 
+const STELLAR_PUBLIC_KEY = /^G[A-Z2-7]{55}$/;
+
+function parseOperatorPublicKeys(value: string | undefined): string[] {
+  if (value === undefined || value.trim() === '') {
+    return [];
+  }
+
+  const keys = value
+    .split(',')
+    .map((key) => key.trim())
+    .filter(Boolean);
+
+  for (const key of keys) {
+    if (!STELLAR_PUBLIC_KEY.test(key)) {
+      throw new Error(
+        'PROMPT_PUBLICATION_OPERATOR_KEYS must contain Stellar public keys',
+      );
+    }
+  }
+
+  return [...new Set(keys)];
+}
+
 function ensureProductionRequirement(env: NodeJS.ProcessEnv, key: string) {
   if (env[key] === undefined || env[key]?.trim() === '') {
     throw new Error(`${key} is required in production`);
@@ -111,6 +135,7 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
     }
 
     ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.cors[0]);
+    ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.publication[0]);
     ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.aws[0]);
     ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.aws[1]);
   }
@@ -167,6 +192,9 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
       region: env.AWS_REGION ?? DEV_DEFAULTS.aws.region,
       keyId: env.AWS_KMS_KEY_ID,
     },
+    operatorPublicKeys: parseOperatorPublicKeys(
+      env.PROMPT_PUBLICATION_OPERATOR_KEYS,
+    ),
   };
 
   validatedEnvCache = validated;
