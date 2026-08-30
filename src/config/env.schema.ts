@@ -39,6 +39,8 @@ export interface AppEnv {
   stellar: StellarEnv;
   corsOrigins: string[];
   aws: AwsEnv;
+  /** Stellar public keys allowed to review curated prompt publications. */
+  operatorPublicKeys: string[];
 }
 
 export const DEV_DEFAULTS = {
@@ -71,4 +73,5 @@ export const DEV_DEFAULTS = {
   aws: {
     region: 'us-east-1',
   },
+  operatorPublicKeys: [] as string[],
 } as const;

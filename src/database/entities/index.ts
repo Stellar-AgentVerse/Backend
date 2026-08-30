@@ -21,3 +21,8 @@ export {
 } from './delivery-command.entity';
 export { DeliveryResultEntity } from './delivery-result.entity';
 export { DeliveryOutboxEntity } from './delivery-outbox.entity';
+export {
+  PromptPublication,
+  PromptPublicationState,
+  MAX_ATOMIC_PRICE,
+} from './prompt-publication.entity';

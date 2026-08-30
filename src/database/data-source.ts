@@ -18,6 +18,7 @@ import {
   DeliveryCommandEntity,
   DeliveryResultEntity,
   DeliveryOutboxEntity,
+  PromptPublication,
 } from './entities';
 
 const env = getValidatedEnv();
@@ -43,6 +44,7 @@ export const dataSourceOptions = {
     UserAsset,
     Tag,
     Purchase,
+    PromptPublication,
   ],
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
   synchronize: false,

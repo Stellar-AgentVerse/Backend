@@ -77,6 +77,7 @@ Docs use bearer auth and stay disabled in production unless `SWAGGER_ENABLED=tru
 | `PROMPT_CONTENT_ENCRYPTION_KEY` | — | Base64-encoded 32-byte key used to encrypt prompt blobs before storage |
 | `AWS_KMS_KEY_ID` | — | KMS key used with tenant and delivery encryption context |
 | `PROMPT_DELIVERY_WORKER_ENABLED` | `false` | Enables the PostgreSQL delivery worker polling loop |
+| `PROMPT_PUBLICATION_OPERATOR_KEYS` | empty | Comma-separated Stellar public keys allowed to review curated prompt publications; empty denies everyone |
 
 ## Marketplace purchase flow
 
