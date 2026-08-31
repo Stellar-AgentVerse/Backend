@@ -18,6 +18,7 @@ import {
   DeliveryCommandEntity,
   DeliveryResultEntity,
   DeliveryOutboxEntity,
+  AuthChallenge,
 } from './entities';
 
 const env = getValidatedEnv();
@@ -46,6 +47,7 @@ export const dataSourceOptions = {
     DeliveryCommandEntity,
     DeliveryResultEntity,
     DeliveryOutboxEntity,
+    AuthChallenge,
   ],
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
   synchronize: false,

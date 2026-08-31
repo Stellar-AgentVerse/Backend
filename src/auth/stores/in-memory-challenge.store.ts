@@ -26,6 +26,14 @@ export class InMemoryChallengeStore implements ChallengeStore {
     return entry;
   }
 
+  async consume(publicKey: string): Promise<ChallengeEntry | null> {
+    const entry = this.store.get(publicKey);
+    if (!entry) return null;
+    this.store.delete(publicKey);
+    if (entry.expiresAt <= new Date()) return null;
+    return entry;
+  }
+
   async delete(publicKey: string): Promise<void> {
     this.store.delete(publicKey);
   }

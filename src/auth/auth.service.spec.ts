@@ -110,7 +110,7 @@ describe('AuthService', () => {
 
   describe('verifyWallet', () => {
     const publicKey = 'GBSHARK...';
-    const signature = 'deadbeef';
+    const signature = 'deadbeef'.repeat(16);
 
     it('should throw UnauthorizedException when no challenge exists', async () => {
       challengeStore.get.mockResolvedValue(null);
@@ -137,6 +137,57 @@ describe('AuthService', () => {
       await expect(
         service.verifyWallet(publicKey, signature),
       ).rejects.toThrow(UnauthorizedException);
+      expect(challengeStore.delete).toHaveBeenCalledWith(publicKey);
+    });
+
+    it('accepts a SEP-53 signature after checking the raw challenge form', async () => {
+      const entry = {
+        challenge: 'test-challenge',
+        publicKey,
+        expiresAt: new Date(Date.now() + 300_000),
+      };
+      challengeStore.get.mockResolvedValue(entry);
+
+      const mockKeypair = {
+        verify: jest.fn().mockReturnValueOnce(false).mockReturnValueOnce(true),
+      };
+      (Keypair.fromPublicKey as jest.Mock).mockReturnValue(mockKeypair);
+      userRepository.findOrCreate.mockResolvedValue({
+        publicKey,
+        status: UserStatus.ACTIVE,
+        displayName: '',
+        avatar: '',
+        createdAt: new Date(),
+        lastLoginAt: new Date(),
+      });
+      userRepository.updateLastLogin.mockResolvedValue({
+        publicKey,
+        status: UserStatus.ACTIVE,
+        displayName: '',
+        avatar: '',
+        createdAt: new Date(),
+        lastLoginAt: new Date(),
+      });
+      jwtService.sign.mockReturnValue('token');
+
+      await expect(service.verifyWallet(publicKey, signature)).resolves.toEqual(
+        expect.objectContaining({ token: 'token' }),
+      );
+      expect(mockKeypair.verify).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects malformed signatures before calling the cryptographic verifier', async () => {
+      challengeStore.get.mockResolvedValue({
+        challenge: 'test-challenge',
+        publicKey,
+        expiresAt: new Date(Date.now() + 300_000),
+      });
+      challengeStore.delete.mockResolvedValue();
+
+      await expect(service.verifyWallet(publicKey, 'not-hex')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(Keypair.fromPublicKey).not.toHaveBeenCalled();
       expect(challengeStore.delete).toHaveBeenCalledWith(publicKey);
     });
 

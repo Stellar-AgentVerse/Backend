@@ -6,7 +6,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { InMemoryChallengeStore } from './stores/in-memory-challenge.store';
+import { DatabaseChallengeStore } from './stores/database-challenge.store';
 import { CHALLENGE_STORE, USER_REPOSITORY } from './common/auth-tokens';
 import { TypeOrmUserRepository } from '../database/repositories';
 
@@ -17,7 +17,7 @@ import { TypeOrmUserRepository } from '../database/repositories';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('jwt.secret') || 'dev-secret',
+        secret: configService.getOrThrow<string>('jwt.secret'),
         signOptions: {
           expiresIn: (configService.get<string>('jwt.expiresIn') || '24h') as `${number}${'s' | 'm' | 'h' | 'd'}`,
         },
@@ -31,7 +31,7 @@ import { TypeOrmUserRepository } from '../database/repositories';
     JwtAuthGuard,
     {
       provide: CHALLENGE_STORE,
-      useClass: InMemoryChallengeStore,
+      useClass: DatabaseChallengeStore,
     },
     {
       provide: USER_REPOSITORY,

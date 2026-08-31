@@ -7,6 +7,8 @@ export interface ChallengeEntry {
 export interface ChallengeStore {
   set(publicKey: string, entry: ChallengeEntry): Promise<void>;
   get(publicKey: string): Promise<ChallengeEntry | null>;
+  /** Atomically returns and consumes a challenge when the store supports it. */
+  consume?(publicKey: string): Promise<ChallengeEntry | null>;
   delete(publicKey: string): Promise<void>;
   sweep(): Promise<number>;
 }

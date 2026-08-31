@@ -21,3 +21,4 @@ export {
 } from './delivery-command.entity';
 export { DeliveryResultEntity } from './delivery-result.entity';
 export { DeliveryOutboxEntity } from './delivery-outbox.entity';
+export { AuthChallenge } from './auth-challenge.entity';
