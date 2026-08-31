@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadGatewayException } from '@nestjs/common';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { PaymentProvider } from './common/interfaces/payment-request.interface';
@@ -35,6 +36,18 @@ describe('PaymentsController', () => {
 
     await expect(controller.createPayment(dto as never)).resolves.toEqual(result);
     expect(paymentsService.processPayment).toHaveBeenCalledWith(dto, PaymentProvider.STRIPE);
+  });
+
+  it('does not return HTTP success for a rejected payment', async () => {
+    const dto = { amount: 10, currency: 'USD', provider: PaymentProvider.STRIPE };
+    paymentsService.processPayment.mockResolvedValue({
+      success: false,
+      error: 'provider rejected',
+    } as never);
+
+    await expect(controller.createPayment(dto as never)).rejects.toBeInstanceOf(
+      BadGatewayException,
+    );
   });
 
   it('delegates createRefund to PaymentsService', async () => {

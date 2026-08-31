@@ -3,12 +3,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PaymentsService } from './payments.service';
 import { StripeAdapter } from './adapters/stripe.adapter';
 import { PayPalAdapter } from './adapters/paypal.adapter';
+import { MockPaymentAdapter } from './adapters/mock-payment.adapter';
 import { PaymentProvider } from './common/interfaces/payment-request.interface';
 
 describe('PaymentsService', () => {
   let service: PaymentsService;
   let stripeAdapter: jest.Mocked<StripeAdapter>;
   let paypalAdapter: jest.Mocked<PayPalAdapter>;
+  let mockPaymentAdapter: jest.Mocked<MockPaymentAdapter>;
 
   beforeEach(async () => {
     const stripeAdapterMock = {
@@ -27,17 +29,30 @@ describe('PaymentsService', () => {
       getProviderName: jest.fn(),
     } as unknown as jest.Mocked<PayPalAdapter>;
 
+    const mockPaymentAdapterMock = {
+      processPayment: jest.fn(),
+      processRefund: jest.fn(),
+      verifyTransaction: jest.fn(),
+      isConfigured: jest.fn(),
+      getProviderName: jest.fn(),
+    } as unknown as jest.Mocked<MockPaymentAdapter>;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentsService,
         { provide: StripeAdapter, useValue: stripeAdapterMock },
         { provide: PayPalAdapter, useValue: paypalAdapterMock },
+        { provide: MockPaymentAdapter, useValue: mockPaymentAdapterMock },
       ],
     }).compile();
 
     service = module.get(PaymentsService);
     stripeAdapter = module.get(StripeAdapter) as jest.Mocked<StripeAdapter>;
     paypalAdapter = module.get(PayPalAdapter) as jest.Mocked<PayPalAdapter>;
+    mockPaymentAdapter = module.get(MockPaymentAdapter) as jest.Mocked<MockPaymentAdapter>;
+    stripeAdapter.isConfigured.mockReturnValue(true);
+    paypalAdapter.isConfigured.mockReturnValue(true);
+    mockPaymentAdapter.isConfigured.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -78,6 +93,29 @@ describe('PaymentsService', () => {
     await expect(
       service.processPayment({ amount: 10, currency: 'USD', provider: 'square' } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('throws when a known provider is unavailable in the current environment', async () => {
+    stripeAdapter.isConfigured.mockReturnValue(false);
+
+    await expect(
+      service.processPayment({ amount: 10, currency: 'USD', provider: PaymentProvider.STRIPE } as never),
+    ).rejects.toThrow('no está configurado');
+  });
+
+  it('routes explicitly selected simulation payments to the mock adapter', async () => {
+    mockPaymentAdapter.isConfigured.mockReturnValue(true);
+    const result = { success: true, transactionId: 'simulated_mock_1' };
+    mockPaymentAdapter.processPayment.mockResolvedValue(result as never);
+
+    await expect(
+      service.processPayment({
+        amount: 10,
+        currency: 'USD',
+        provider: PaymentProvider.MOCK,
+      } as never),
+    ).resolves.toEqual(result);
+    expect(mockPaymentAdapter.processPayment).toHaveBeenCalled();
   });
 
   it('routes refunds to the selected provider adapter', async () => {
@@ -131,6 +169,7 @@ describe('PaymentsService', () => {
     // integration, so advertising them would be a false capability claim.
     stripeAdapter.isConfigured.mockReturnValue(false);
     paypalAdapter.isConfigured.mockReturnValue(false);
+    mockPaymentAdapter.isConfigured.mockReturnValue(false);
 
     expect(service.getAvailableProviders()).toEqual([]);
   });

@@ -10,6 +10,7 @@ import { PaymentsController } from '../src/payments/payments.controller';
 import { PaymentsService } from '../src/payments/payments.service';
 import { StripeAdapter } from '../src/payments/adapters/stripe.adapter';
 import { PayPalAdapter } from '../src/payments/adapters/paypal.adapter';
+import { MockPaymentAdapter } from '../src/payments/adapters/mock-payment.adapter';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import { ResponseInterceptor } from '../src/common/interceptors/response.interceptor';
 
@@ -23,6 +24,11 @@ type PaymentBody = {
   metadata?: Record<string, unknown>;
 };
 type ProvidersBody = { providers: string[] };
+type ErrorBody = {
+  statusCode: number;
+  message: string;
+  error: string;
+};
 
 /**
  * The payment adapters have no provider SDK behind them and have only ever
@@ -55,7 +61,13 @@ describe('Payments API (e2e)', () => {
         }),
       ],
       controllers: [PaymentsController],
-      providers: [JwtStrategy, PaymentsService, StripeAdapter, PayPalAdapter],
+      providers: [
+        JwtStrategy,
+        PaymentsService,
+        StripeAdapter,
+        PayPalAdapter,
+        MockPaymentAdapter,
+      ],
     }).compile();
 
     const created =
@@ -124,11 +136,11 @@ describe('Payments API (e2e)', () => {
         .post('/api/payments')
         .set('Authorization', `Bearer ${validToken}`)
         .send({ amount: 10, currency: 'USD', provider: 'stripe' })
-        .expect(201);
-      const body = res.body as Envelope<PaymentBody>;
+        .expect(503);
+      const body = res.body as ErrorBody;
 
-      expect(body.data.success).toBe(false);
-      expect(body.data.transactionId).toBe('N/A');
+      expect(body.statusCode).toBe(503);
+      expect(body.message).toContain('no está configurado');
       expect(JSON.stringify(body)).not.toContain('stripe_');
     });
 
@@ -137,10 +149,11 @@ describe('Payments API (e2e)', () => {
         .post('/api/payments/refund')
         .set('Authorization', `Bearer ${validToken}`)
         .send({ transactionId: 'tx-1', provider: 'paypal' })
-        .expect(201);
-      const body = res.body as Envelope<PaymentBody>;
+        .expect(503);
+      const body = res.body as ErrorBody;
 
-      expect(body.data.success).toBe(false);
+      expect(body.statusCode).toBe(503);
+      expect(body.message).toContain('no está configurado');
       expect(JSON.stringify(body)).not.toContain('paypal_refund_');
     });
   });
@@ -170,6 +183,28 @@ describe('Payments API (e2e)', () => {
 
       expect(body.data.success).toBe(true);
       expect(body.data.transactionId).toMatch(/^simulated_stripe_/);
+      expect(body.data.metadata?.simulated).toBe(true);
+    });
+
+    it('exposes and routes the explicit mock provider only in simulation mode', async () => {
+      const providers = await request(devApp.getHttpServer())
+        .get('/api/payments/providers')
+        .expect(200);
+      expect((providers.body as Envelope<ProvidersBody>).data.providers).toEqual([
+        'stripe',
+        'mock',
+      ]);
+
+      const token = devApp.get(JwtService).sign(CALLER);
+      const res = await request(devApp.getHttpServer())
+        .post('/api/payments')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ amount: 10, currency: 'USD', provider: 'mock' })
+        .expect(201);
+
+      const body = res.body as Envelope<PaymentBody>;
+      expect(body.data.success).toBe(true);
+      expect(body.data.transactionId).toMatch(/^simulated_mock_/);
       expect(body.data.metadata?.simulated).toBe(true);
     });
   });
