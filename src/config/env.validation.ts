@@ -135,9 +135,26 @@ function ensureSimulationIsDisabled(env: NodeJS.ProcessEnv) {
   }
 }
 
+function ensureDeliveryWorkerRequirements(env: NodeJS.ProcessEnv) {
+  if (
+    parseBoolean(
+      env.PROMPT_DELIVERY_WORKER_ENABLED,
+      false,
+      'PROMPT_DELIVERY_WORKER_ENABLED',
+    ) &&
+    (env.AWS_KMS_KEY_ID === undefined || env.AWS_KMS_KEY_ID.trim() === '')
+  ) {
+    throw new Error(
+      'AWS_KMS_KEY_ID is required when PROMPT_DELIVERY_WORKER_ENABLED is "true"',
+    );
+  }
+}
+
 export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
   const isProduction = env.NODE_ENV === 'production';
   const simulationAllowed = isSimulationAllowed(env);
+
+  ensureDeliveryWorkerRequirements(env);
 
   // Checked before the production block so that staging — which is not
   // `production` and so satisfies none of the rules below — still fails closed.

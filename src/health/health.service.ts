@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import * as StellarSdk from '@stellar/stellar-sdk';
 import { sorobanConfig } from '../tokens/config/soroban.config';
 
 export type DependencyStatus = 'ok' | 'error' | 'skipped';
@@ -21,6 +22,16 @@ export interface HealthReport {
   checks: DependencyCheck[];
 }
 
+interface SorobanRpcResult {
+  status?: string;
+  entries?: unknown[];
+}
+
+interface SorobanRpcResponse {
+  result?: SorobanRpcResult;
+  error?: { message?: string };
+}
+
 /** Soroban RPC is polled at most once per window; health probes run often. */
 const RPC_CACHE_TTL_MS = 15_000;
 const RPC_TIMEOUT_MS = 2_000;
@@ -40,6 +51,10 @@ type SorobanSettings = {
 export class HealthService {
   private readonly logger = new Logger(HealthService.name);
   private rpcCache?: { expiresAt: number; check: DependencyCheck };
+  private marketplaceContractCache?: {
+    expiresAt: number;
+    check: DependencyCheck;
+  };
 
   constructor(
     private readonly dataSource: DataSource,
@@ -57,7 +72,7 @@ export class HealthService {
       this.checkDatabase(),
       this.checkSchema(),
       this.checkSorobanRpc(),
-      Promise.resolve(this.checkMarketplaceContract()),
+      this.checkMarketplaceContract(),
       Promise.resolve(this.checkDeliveryWorker()),
     ]);
 
@@ -195,32 +210,23 @@ export class HealthService {
     }
 
     const startedAt = Date.now();
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
 
     let check: DependencyCheck;
     try {
-      const response = await fetch(this.soroban.rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getHealth' }),
-        signal: controller.signal,
-      });
+      const result = await this.callSorobanRpc('getHealth');
+      if (result.status !== 'healthy') {
+        throw new Error(
+          `rpc health status: ${result.status ?? 'unknown'}`,
+        );
+      }
 
-      check = response.ok
-        ? {
-            name: 'sorobanRpc',
-            status: 'ok',
-            required,
-            latencyMs: Date.now() - startedAt,
-          }
-        : {
-            name: 'sorobanRpc',
-            status: 'error',
-            required,
-            latencyMs: Date.now() - startedAt,
-            detail: `rpc responded ${response.status}`,
-          };
+      check = {
+        name: 'sorobanRpc',
+        status: 'ok',
+        required,
+        latencyMs: Date.now() - startedAt,
+        detail: 'healthy',
+      };
     } catch (error) {
       check = {
         name: 'sorobanRpc',
@@ -229,28 +235,106 @@ export class HealthService {
         latencyMs: Date.now() - startedAt,
         detail: (error as Error).message,
       };
-    } finally {
-      clearTimeout(timer);
     }
 
     this.rpcCache = { expiresAt: Date.now() + RPC_CACHE_TTL_MS, check };
     return check;
   }
 
-  private checkMarketplaceContract(): DependencyCheck {
-    return this.hasMarketplaceContract()
-      ? {
-          name: 'marketplaceContract',
-          status: 'ok',
-          required: false,
-          detail: this.soroban.contracts.purchaseContractId,
-        }
-      : {
-          name: 'marketplaceContract',
-          status: 'skipped',
-          required: false,
-          detail: 'SOROBAN_MARKETPLACE_CONTRACT_ID is not configured',
-        };
+  private async checkMarketplaceContract(): Promise<DependencyCheck> {
+    if (!this.hasMarketplaceContract()) {
+      return {
+        name: 'marketplaceContract',
+        status: 'skipped',
+        required: false,
+        detail: 'SOROBAN_MARKETPLACE_CONTRACT_ID is not configured',
+      };
+    }
+
+    if (
+      this.marketplaceContractCache &&
+      this.marketplaceContractCache.expiresAt > Date.now()
+    ) {
+      return this.marketplaceContractCache.check;
+    }
+
+    const startedAt = Date.now();
+    const contractId = this.soroban.contracts.purchaseContractId;
+    let check: DependencyCheck;
+
+    try {
+      // Every deployed Soroban contract has a persistent contract-instance
+      // ledger entry. Reading its footprint verifies the configured ID rather
+      // than merely echoing an environment variable back as "healthy".
+      const contractKey = new StellarSdk.Contract(contractId).getFootprint();
+      const result = await this.callSorobanRpc('getLedgerEntries', {
+        keys: [contractKey.toXDR('base64')],
+      });
+
+      if (!Array.isArray(result.entries) || result.entries.length === 0) {
+        throw new Error('marketplace contract was not found on the network');
+      }
+
+      check = {
+        name: 'marketplaceContract',
+        status: 'ok',
+        required: true,
+        latencyMs: Date.now() - startedAt,
+        detail: contractId,
+      };
+    } catch (error) {
+      check = {
+        name: 'marketplaceContract',
+        status: 'error',
+        required: true,
+        latencyMs: Date.now() - startedAt,
+        detail: (error as Error).message,
+      };
+    }
+
+    this.marketplaceContractCache = {
+      expiresAt: Date.now() + RPC_CACHE_TTL_MS,
+      check,
+    };
+    return check;
+  }
+
+  private async callSorobanRpc(
+    method: string,
+    params?: Record<string, unknown>,
+  ): Promise<SorobanRpcResult> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(this.soroban.rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method,
+          ...(params ? { params } : {}),
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`rpc responded ${response.status}`);
+      }
+
+      const payload = (await response.json()) as SorobanRpcResponse;
+      if (payload.error) {
+        throw new Error(payload.error.message ?? `rpc ${method} failed`);
+      }
+      if (!payload.result) {
+        throw new Error(`rpc ${method} returned no result`);
+      }
+
+      return payload.result;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**
@@ -260,13 +344,23 @@ export class HealthService {
    */
   private checkDeliveryWorker(): DependencyCheck {
     const enabled = process.env.PROMPT_DELIVERY_WORKER_ENABLED === 'true';
+    const kmsKeyConfigured = Boolean(process.env.AWS_KMS_KEY_ID?.trim());
+
+    if (enabled && !kmsKeyConfigured) {
+      return {
+        name: 'deliveryWorker',
+        status: 'error',
+        required: true,
+        detail: 'AWS_KMS_KEY_ID is required when the delivery worker is enabled',
+      };
+    }
 
     return {
       name: 'deliveryWorker',
       status: enabled ? 'ok' : 'skipped',
-      required: false,
+      required: enabled,
       detail: enabled
-        ? 'polling enabled'
+        ? 'polling enabled with KMS encryption'
         : 'PROMPT_DELIVERY_WORKER_ENABLED is not "true"',
     };
   }

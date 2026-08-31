@@ -7,8 +7,11 @@ An invented URL or contract id here would read as evidence, so none are written.
 
 ## Environment contract
 
-`src/config/env.validation.ts` requires all sixteen of these when
-`NODE_ENV=production`; bootstrap throws naming the first missing one.
+`src/config/env.validation.ts` requires the deployment variables marked as
+required below when `NODE_ENV=production`; bootstrap throws naming the first
+missing one. Token contract IDs and the admin signing key remain optional until
+their write operations are enabled. `AWS_KMS_KEY_ID` becomes required when the
+prompt delivery worker is enabled.
 
 | Variable | Notes |
 | --- | --- |
@@ -19,7 +22,8 @@ An invented URL or contract id here would read as evidence, so none are written.
 | `SOROBAN_TOKEN_MINT_CONTRACT_ID`, `SOROBAN_TOKEN_SALE_CONTRACT_ID` | Token contracts. Absent values degrade token operations rather than blocking boot. |
 | `STELLAR_ADMIN_SECRET_KEY` | Long-lived signing key for admin token operations. See **Secret ownership**. |
 | `CORS_ORIGINS` | Explicit origins. `*` is rejected in production. |
-| `AWS_REGION`, `AWS_KMS_KEY_ID` | KMS boundary for encrypted prompt delivery. |
+| `AWS_REGION` | Required AWS region. |
+| `AWS_KMS_KEY_ID` | Required when `PROMPT_DELIVERY_WORKER_ENABLED=true`; KMS key for encrypted prompt delivery. |
 
 Set `DB_SYNCHRONIZE=false`; `.env.example` already does. Compose interpolates
 `${DB_SYNCHRONIZE}` from that same `.env`, so the file the operator copies is what
@@ -46,8 +50,9 @@ Compose defaults `NODE_ENV` to `production` but supplies only nine of the sixtee
 required variables itself; the rest come from the `.env` file it reads.
 `cp .env.example .env` alone is not enough — `SOROBAN_MARKETPLACE_CONTRACT_ID`,
 `SOROBAN_TOKEN_MINT_CONTRACT_ID`, `SOROBAN_TOKEN_SALE_CONTRACT_ID`,
-`STELLAR_ADMIN_SECRET_KEY` and `AWS_KMS_KEY_ID` ship empty and bootstrap aborts
-naming the first one it finds unset. Fill them, or run with
+`STELLAR_ADMIN_SECRET_KEY` and `AWS_KMS_KEY_ID` ship empty. Fill the KMS key if
+the delivery worker is enabled. Fill the optional token/admin values before
+using token operations, or run with
 `NODE_ENV=development` for a local stack.
 
 Without Docker, the same sequence is:
@@ -77,7 +82,9 @@ required check must be `ok`:
   the newest file in `src/database/migrations/`; a mismatch means the deploy is
   running against an older schema.
 - **sorobanRpc** — required once a real marketplace contract is configured.
-- **marketplaceContract**, **deliveryWorker** — reported, never required.
+- **marketplaceContract** — required when configured; health reads its persistent
+  contract-instance ledger entry through Soroban RPC rather than trusting the ID.
+- **deliveryWorker** — required when enabled and must have a KMS key configured.
 
 `GET /api/health/live` answers process liveness only. Use it for restart probes
 so a transient dependency outage does not cycle containers, and `/api/health` for
@@ -131,6 +138,9 @@ Reconciliation notes:
   cannot remove an enum value, so `MODEL` and `ORACLE` remain on
   `asset_type_enum` after a revert. They are additive and unused by existing
   rows; leaving them is safe.
+- `AddAuthChallenges1700000005000` creates the durable single-use wallet
+  challenge table. Revert it only after no in-flight authentication requests
+  depend on that table.
 - Never resolve schema drift by enabling `DB_SYNCHRONIZE`. Write a migration.
 - A confirmed Stellar transaction cannot be reversed. Reconcile a bad settlement
   by correcting listing access and the matching credit, never by rewriting

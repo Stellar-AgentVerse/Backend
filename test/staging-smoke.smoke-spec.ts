@@ -45,7 +45,7 @@ const EXPECTED_ASSET_TYPES = [
   'ORACLE',
 ];
 
-const APPLIED_MIGRATION = 'AlignMigratedSchemaWithEntities1700000004000';
+const APPLIED_MIGRATION = 'AddAuthChallenges1700000005000';
 
 /** ResponseInterceptor wraps every non-health payload. */
 interface Envelope<T> {
@@ -266,7 +266,7 @@ describe('Testnet staging smoke', () => {
         'SELECT name FROM migrations ORDER BY timestamp ASC',
       );
 
-      expect(applied.length).toBeGreaterThanOrEqual(5);
+      expect(applied.length).toBeGreaterThanOrEqual(6);
       expect(applied.map((row) => row.name)).toContain(APPLIED_MIGRATION);
     });
 

@@ -246,6 +246,27 @@ describe('validateEnv', () => {
     expect(env.db.seedOnStartup).toBe(false);
   });
 
+  it('requires a KMS key when the prompt delivery worker is enabled', () => {
+    expect(() =>
+      validateEnv({
+        ...HARDENED_STAGING_ENV,
+        PROMPT_DELIVERY_WORKER_ENABLED: 'true',
+      }),
+    ).toThrow(
+      'AWS_KMS_KEY_ID is required when PROMPT_DELIVERY_WORKER_ENABLED is "true"',
+    );
+
+    resetValidatedEnvCache();
+
+    expect(
+      validateEnv({
+        ...HARDENED_STAGING_ENV,
+        PROMPT_DELIVERY_WORKER_ENABLED: 'true',
+        AWS_KMS_KEY_ID: 'alias/agentverse',
+      }).aws.keyId,
+    ).toBe('alias/agentverse');
+  });
+
   it('caches the validated environment for later consumers', () => {
     const validated = validateEnv({ NODE_ENV: 'development' });
 
