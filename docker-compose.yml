@@ -54,7 +54,10 @@ services:
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-agentverse}
-      DB_SYNCHRONIZE: ${DB_SYNCHRONIZE:-true}
+      # The schema is applied by entrypoint.sh via migration:run, not by
+      # TypeORM auto-synchronize. Auto-sync against a migrated database silently
+      # rewrites columns and indexes.
+      DB_SYNCHRONIZE: ${DB_SYNCHRONIZE:-false}
       # No default. This stack defaults NODE_ENV to production, and wallet
       # identity is derived from the JWT, so falling back to the published
       # 'dev-secret' would let anyone mint a token for any wallet.
