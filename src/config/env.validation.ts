@@ -22,20 +22,17 @@ const SIMULATION_FLAGS = [
   'DB_SEED_ON_STARTUP',
 ] as const;
 
-const REQUIRED_IN_PRODUCTION = {
+const REQUIRED_IN_REAL_DEPLOYMENT = {
   db: ['DB_HOST', 'DB_PORT', 'DB_USERNAME', 'DB_PASSWORD', 'DB_NAME'] as const,
   jwt: ['JWT_SECRET'] as const,
   stellar: [
     'STELLAR_NETWORK',
     'STELLAR_RPC_URL',
     'STELLAR_NETWORK_PASSPHRASE',
-    'SOROBAN_TOKEN_MINT_CONTRACT_ID',
-    'SOROBAN_TOKEN_SALE_CONTRACT_ID',
     'SOROBAN_MARKETPLACE_CONTRACT_ID',
-    'STELLAR_ADMIN_SECRET_KEY',
   ] as const,
   cors: ['CORS_ORIGINS'] as const,
-  aws: ['AWS_REGION', 'AWS_KMS_KEY_ID'] as const,
+  aws: ['AWS_REGION'] as const,
 };
 
 function parseBoolean(
@@ -92,7 +89,7 @@ function parseCorsOrigins(
   }
 
   if (!allowWildcard && origins.includes('*')) {
-    throw new Error('CORS_ORIGINS must list explicit origins in production');
+    throw new Error('CORS_ORIGINS must list explicit origins in real deployments');
   }
 
   for (const origin of origins) {
@@ -149,27 +146,29 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
 
     // Wallet identity is derived solely from the JWT, so a signing key that
     // falls back to the published `dev-secret` would let anyone mint a token
-    // for any wallet. Required in every real deployment, not only
-    // `NODE_ENV=production`. Production keeps its own wording below.
-    if (!isProduction) {
-      ensureDeploymentRequirement(env, REQUIRED_IN_PRODUCTION.jwt[0]);
+    // for any wallet. All real deployments must provide the complete runtime
+    // contract; only development and test may use defaults.
+    const required = [
+      ...REQUIRED_IN_REAL_DEPLOYMENT.db,
+      ...REQUIRED_IN_REAL_DEPLOYMENT.stellar,
+      ...REQUIRED_IN_REAL_DEPLOYMENT.cors,
+      ...REQUIRED_IN_REAL_DEPLOYMENT.aws,
+    ];
+
+    const ensureRequired = (key: string) => {
+      if (isProduction) {
+        ensureProductionRequirement(env, key);
+      } else {
+        ensureDeploymentRequirement(env, key);
+      }
+    };
+
+    // Keep JWT first so the most security-sensitive missing requirement is
+    // reported before the rest of the deployment contract.
+    ensureRequired(REQUIRED_IN_REAL_DEPLOYMENT.jwt[0]);
+    for (const key of required) {
+      ensureRequired(key);
     }
-  }
-
-  if (isProduction) {
-    ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.jwt[0]);
-
-    for (const key of REQUIRED_IN_PRODUCTION.db) {
-      ensureProductionRequirement(env, key);
-    }
-
-    for (const key of REQUIRED_IN_PRODUCTION.stellar) {
-      ensureProductionRequirement(env, key);
-    }
-
-    ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.cors[0]);
-    ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.aws[0]);
-    ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.aws[1]);
   }
 
   const validated: AppEnv = {

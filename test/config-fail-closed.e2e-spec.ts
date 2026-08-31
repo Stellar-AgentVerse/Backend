@@ -26,6 +26,17 @@ describe('Environment fail-closed boot (e2e)', () => {
     'MOCK_PAYMENT_ENABLED',
     'MOCK_PAYMENT_FAIL',
     'DB_SEED_ON_STARTUP',
+    'DB_HOST',
+    'DB_PORT',
+    'DB_USERNAME',
+    'DB_PASSWORD',
+    'DB_NAME',
+    'STELLAR_NETWORK',
+    'STELLAR_RPC_URL',
+    'STELLAR_NETWORK_PASSPHRASE',
+    'SOROBAN_MARKETPLACE_CONTRACT_ID',
+    'CORS_ORIGINS',
+    'AWS_REGION',
   ] as const;
 
   const saved = new Map<string, string | undefined>();
@@ -54,6 +65,22 @@ describe('Environment fail-closed boot (e2e)', () => {
         }),
       ],
     }).compile();
+
+  const HARDENED_STAGING_ENV = {
+    NODE_ENV: 'staging',
+    JWT_SECRET: 'a-real-secret',
+    DB_HOST: 'db.internal',
+    DB_PORT: '5432',
+    DB_USERNAME: 'postgres',
+    DB_PASSWORD: 'postgres',
+    DB_NAME: 'agentverse',
+    STELLAR_NETWORK: 'testnet',
+    STELLAR_RPC_URL: 'https://rpc.stellar.example',
+    STELLAR_NETWORK_PASSPHRASE: 'Test SDF Network ; September 2015',
+    SOROBAN_MARKETPLACE_CONTRACT_ID: 'C_MARKET',
+    CORS_ORIGINS: 'https://app.example',
+    AWS_REGION: 'us-east-1',
+  };
 
   it('boots in test mode', async () => {
     process.env.NODE_ENV = 'test';
@@ -96,8 +123,7 @@ describe('Environment fail-closed boot (e2e)', () => {
   });
 
   it('boots a hardened environment once the signing key is supplied', async () => {
-    process.env.NODE_ENV = 'staging';
-    process.env.JWT_SECRET = 'a-real-secret';
+    Object.assign(process.env, HARDENED_STAGING_ENV);
 
     const moduleRef = await boot();
     await moduleRef.close();

@@ -4,6 +4,22 @@ import {
   validateEnv,
 } from './env.validation';
 
+const HARDENED_STAGING_ENV = {
+  NODE_ENV: 'staging',
+  JWT_SECRET: 'a-real-secret',
+  DB_HOST: 'db.internal',
+  DB_PORT: '5432',
+  DB_USERNAME: 'postgres',
+  DB_PASSWORD: 'postgres',
+  DB_NAME: 'agentverse',
+  STELLAR_NETWORK: 'testnet',
+  STELLAR_RPC_URL: 'https://rpc.stellar.example',
+  STELLAR_NETWORK_PASSPHRASE: 'Test SDF Network ; September 2015',
+  SOROBAN_MARKETPLACE_CONTRACT_ID: 'C_MARKET',
+  CORS_ORIGINS: 'https://app.example',
+  AWS_REGION: 'us-east-1',
+};
+
 describe('validateEnv', () => {
   afterEach(() => {
     resetValidatedEnvCache();
@@ -148,7 +164,7 @@ describe('validateEnv', () => {
       // truthy value in staging is a future caller bypassing the guard. The
       // computed value stays false regardless.
       expect(
-        validateEnv({ NODE_ENV: 'staging', JWT_SECRET: 's' }).payments
+        validateEnv({ ...HARDENED_STAGING_ENV }).payments
           .simulationEnabled,
       ).toBe(false);
     });
@@ -169,7 +185,7 @@ describe('validateEnv', () => {
 
     it('disables database seeding for any environment that is not development or test', () => {
       expect(
-        validateEnv({ NODE_ENV: 'staging', JWT_SECRET: 's' }).db.seedOnStartup,
+        validateEnv({ ...HARDENED_STAGING_ENV }).db.seedOnStartup,
       ).toBe(false);
 
       resetValidatedEnvCache();
@@ -212,6 +228,12 @@ describe('validateEnv', () => {
       expect(validateEnv({ NODE_ENV: 'development' }).jwt.secret).toBe(
         'dev-secret',
       );
+    });
+
+    it('requires the remaining deployment contract after the signing key', () => {
+      expect(() =>
+        validateEnv({ NODE_ENV: 'staging', JWT_SECRET: 'real-secret' }),
+      ).toThrow('DB_HOST is required when NODE_ENV is "staging"');
     });
   });
 
