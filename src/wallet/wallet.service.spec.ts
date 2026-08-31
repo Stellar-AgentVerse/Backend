@@ -13,7 +13,11 @@ import {
   WalletTransaction,
   TransactionType,
 } from '../database/entities';
-import { OnChainBalanceStatus } from './dto/wallet-response.dto';
+import {
+  OnChainBalanceStatus,
+  PlatformCreditStatus,
+  HISTORICAL_CREDITS_UNVERIFIED,
+} from './dto/wallet-response.dto';
 import { CREDIT_PURCHASE_NOT_AVAILABLE } from './wallet.capabilities';
 
 const UNAVAILABLE_ON_CHAIN = {
@@ -69,7 +73,9 @@ describe('WalletService', () => {
       // carried, so removing the write-on-read does not silently change what a
       // first-time caller sees.
       await expect(service.getBalance('GBUSER')).resolves.toEqual({
-        credits: 0,
+        credits: null,
+        creditStatus: PlatformCreditStatus.QUARANTINED,
+        creditReason: HISTORICAL_CREDITS_UNVERIFIED,
         monthlyUsage: 0,
         monthlyAllocation: 100,
         usagePercent: 0,
@@ -93,7 +99,9 @@ describe('WalletService', () => {
       const result = await service.getBalance('GBUSER');
 
       expect(result).toEqual({
-        credits: 120,
+        credits: null,
+        creditStatus: PlatformCreditStatus.QUARANTINED,
+        creditReason: HISTORICAL_CREDITS_UNVERIFIED,
         monthlyUsage: 10,
         monthlyAllocation: 40,
         usagePercent: 25,

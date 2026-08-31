@@ -8,6 +8,8 @@ import {
   CreditPackagesDto,
   OnChainBalanceStatus,
   STELLAR_BALANCE_NOT_INTEGRATED,
+  PlatformCreditStatus,
+  HISTORICAL_CREDITS_UNVERIFIED,
   WalletTransactionDto,
 } from './dto/wallet-response.dto';
 import { CREDIT_PURCHASE_CAPABILITY } from './wallet.capabilities';
@@ -55,14 +57,18 @@ export class WalletService {
   async getBalance(userPublicKey: string): Promise<WalletBalanceDto> {
     const wallet = await this.walletRepo.findOne({ where: { userPublicKey } });
 
-    const credits = Number(wallet?.credits ?? 0);
     const monthlyUsage = Number(wallet?.monthlyUsage ?? 0);
     const monthlyAllocation = Number(
       wallet?.monthlyAllocation ?? DEFAULT_MONTHLY_ALLOCATION,
     );
 
     return {
-      credits,
+      // Existing wallet rows were created by simulation and have no provenance
+      // that can be reconciled against a settlement. Preserve the stored value
+      // for operator reconciliation, but never expose it as spendable balance.
+      credits: null,
+      creditStatus: PlatformCreditStatus.QUARANTINED,
+      creditReason: HISTORICAL_CREDITS_UNVERIFIED,
       monthlyUsage,
       monthlyAllocation,
       usagePercent:

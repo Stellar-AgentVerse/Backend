@@ -15,6 +15,12 @@ export enum OnChainBalanceStatus {
 
 export const STELLAR_BALANCE_NOT_INTEGRATED = 'STELLAR_BALANCE_NOT_INTEGRATED';
 
+export enum PlatformCreditStatus {
+  QUARANTINED = 'QUARANTINED',
+}
+
+export const HISTORICAL_CREDITS_UNVERIFIED = 'HISTORICAL_CREDITS_UNVERIFIED';
+
 export class OnChainBalanceDto {
   @ApiProperty({
     enum: OnChainBalanceStatus,
@@ -56,9 +62,16 @@ export class OnChainBalanceDto {
 export class WalletBalanceDto {
   @ApiProperty({
     description:
-      'First-party platform credits held by this wallet. Not a currency and not redeemable.',
+      'Usable platform credits. Null while historical credits lack settlement provenance.',
+    nullable: true,
   })
-  credits: number;
+  credits: number | null;
+
+  @ApiProperty({ enum: PlatformCreditStatus })
+  creditStatus: PlatformCreditStatus;
+
+  @ApiProperty({ example: HISTORICAL_CREDITS_UNVERIFIED })
+  creditReason: string;
 
   @ApiProperty()
   monthlyUsage: number;

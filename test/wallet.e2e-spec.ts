@@ -271,7 +271,9 @@ describe('Wallet API (e2e)', () => {
       // The repository fixture exposes findOne only: any attempt to persist
       // would throw rather than silently write on a GET.
       expect(Object.keys(walletRepo)).toEqual(['findOne']);
-      expect(body.data.credits).toBe(0);
+      expect(body.data.credits).toBeNull();
+      expect(body.data.creditStatus).toBe('QUARANTINED');
+      expect(body.data.creditReason).toBe('HISTORICAL_CREDITS_UNVERIFIED');
       // Matches the column default a created row would have carried.
       expect(body.data.monthlyAllocation).toBe(100);
     });
@@ -298,8 +300,10 @@ describe('Wallet API (e2e)', () => {
       });
       expect(body.data).not.toHaveProperty('xlmBalance');
       expect(body.data).not.toHaveProperty('xlmUsdEstimate');
-      // First-party credit state is real and is still reported.
-      expect(body.data.credits).toBe(450);
+      // Historical simulated credit rows remain available to operators for
+      // reconciliation but are not presented as spendable balance.
+      expect(body.data.credits).toBeNull();
+      expect(body.data.creditStatus).toBe('QUARANTINED');
     });
 
     it('reports a fabricated txid as having no verified ledger reference', async () => {
