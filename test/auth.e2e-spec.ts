@@ -81,7 +81,7 @@ describe('Auth (e2e)', () => {
       // Step 3: Verify wallet
       const verifyRes = await request(app.getHttpServer())
         .post('/api/auth/wallet')
-        .send({ publicKey, signature: 'deadbeef' })
+        .send({ publicKey, signature: 'ab'.repeat(64) })
         .expect(200);
 
       expect(verifyRes.body).toHaveProperty('token');
@@ -107,13 +107,13 @@ describe('Auth (e2e)', () => {
       // First verify should succeed
       await request(app.getHttpServer())
         .post('/api/auth/wallet')
-        .send({ publicKey: pk, signature: 'deadbeef' })
+        .send({ publicKey: pk, signature: 'ab'.repeat(64) })
         .expect(200);
 
       // Second verify with same signature should fail (challenge consumed)
       await request(app.getHttpServer())
         .post('/api/auth/wallet')
-        .send({ publicKey: pk, signature: 'deadbeef' })
+        .send({ publicKey: pk, signature: 'ab'.repeat(64) })
         .expect(401);
     });
 
