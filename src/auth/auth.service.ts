@@ -1,6 +1,6 @@
 import { Injectable, Inject, UnauthorizedException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Keypair } from '@stellar/stellar-sdk';
 import type { ChallengeStore } from './stores/challenge-store.interface';
 import type { UserRepository } from './repositories/user-repository.interface';
@@ -38,24 +38,44 @@ export class AuthService {
   }
 
   async verifyWallet(publicKey: string, signature: string): Promise<AuthResult> {
-    const entry = await this.challengeStore.get(publicKey);
+    const entry = this.challengeStore.consume
+      ? await this.challengeStore.consume(publicKey)
+      : await this.challengeStore.get(publicKey);
     if (!entry) {
       throw new UnauthorizedException('Challenge not found or expired');
     }
 
-    // Delete challenge immediately (single-use)
-    await this.challengeStore.delete(publicKey);
-
-    // Verify the signature
-    const keypair = Keypair.fromPublicKey(publicKey);
-    const isValid = keypair.verify(
-      Buffer.from(entry.challenge, 'utf-8'),
-      Buffer.from(signature, 'hex'),
-    );
-
-    if (!isValid) {
+    if (!/^[0-9a-f]{128}$/i.test(signature)) {
+      if (!this.challengeStore.consume) await this.challengeStore.delete(publicKey);
       throw new UnauthorizedException('Invalid signature');
     }
+
+    let isValid = false;
+    try {
+      const keypair = Keypair.fromPublicKey(publicKey);
+      const signatureBytes = Buffer.from(signature, 'hex');
+      const challengeBytes = Buffer.from(entry.challenge, 'utf-8');
+      const sep53Prefix = Buffer.from('Stellar Signed Message:\n', 'utf-8');
+      const sep53Message = createHash('sha256')
+        .update(Buffer.concat([sep53Prefix, challengeBytes]))
+        .digest();
+
+      isValid =
+        keypair.verify(challengeBytes, signatureBytes) ||
+        keypair.verify(sep53Message, signatureBytes);
+    } catch {
+      if (!this.challengeStore.consume) await this.challengeStore.delete(publicKey);
+      throw new UnauthorizedException('Invalid signature');
+    }
+
+    if (!isValid) {
+      if (!this.challengeStore.consume) await this.challengeStore.delete(publicKey);
+      throw new UnauthorizedException('Invalid signature');
+    }
+
+    // The durable consume path already deleted the challenge transactionally.
+    // Keep the fallback single-use for isolated tests and legacy adapters.
+    if (!this.challengeStore.consume) await this.challengeStore.delete(publicKey);
 
     // Upsert user
     const user = await this.userRepository.findOrCreate(publicKey);

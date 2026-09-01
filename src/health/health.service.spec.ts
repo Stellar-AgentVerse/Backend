@@ -19,6 +19,7 @@ describe('HealthService', () => {
 
   const originalFetch = global.fetch;
   const originalWorkerFlag = process.env.PROMPT_DELIVERY_WORKER_ENABLED;
+  const originalKmsKeyId = process.env.AWS_KMS_KEY_ID;
 
   async function build() {
     const module: TestingModule = await Test.createTestingModule({
@@ -47,9 +48,14 @@ describe('HealthService', () => {
       rpcUrl: 'https://soroban-testnet.stellar.org',
       contracts: { purchaseContractId: '' },
     };
-    fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+    fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({ result: { status: 'healthy' } }),
+    });
     global.fetch = fetchMock as unknown as typeof fetch;
     delete process.env.PROMPT_DELIVERY_WORKER_ENABLED;
+    delete process.env.AWS_KMS_KEY_ID;
 
     await build();
   });
@@ -60,6 +66,11 @@ describe('HealthService', () => {
       delete process.env.PROMPT_DELIVERY_WORKER_ENABLED;
     } else {
       process.env.PROMPT_DELIVERY_WORKER_ENABLED = originalWorkerFlag;
+    }
+    if (originalKmsKeyId === undefined) {
+      delete process.env.AWS_KMS_KEY_ID;
+    } else {
+      process.env.AWS_KMS_KEY_ID = originalKmsKeyId;
     }
   });
 
@@ -138,7 +149,7 @@ describe('HealthService', () => {
 
   it('should treat Soroban RPC as required once a marketplace contract is configured', async () => {
     soroban.contracts.purchaseContractId =
-      'CDEPLOYEDMARKETPLACECONTRACTIDFORUNITTEST';
+      'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM';
     await build();
     fetchMock.mockRejectedValue(new Error('rpc unreachable'));
 
@@ -146,7 +157,7 @@ describe('HealthService', () => {
 
     expect(report.status).toBe('error');
     expect(find(report.checks, 'sorobanRpc').required).toBe(true);
-    expect(find(report.checks, 'marketplaceContract').status).toBe('ok');
+    expect(find(report.checks, 'marketplaceContract').status).toBe('error');
   });
 
   it('should not treat a PLACEHOLDER contract id as a configured contract', async () => {
@@ -159,6 +170,71 @@ describe('HealthService', () => {
     expect(report.status).toBe('ok');
     expect(find(report.checks, 'sorobanRpc').required).toBe(false);
     expect(find(report.checks, 'marketplaceContract').status).toBe('skipped');
+  });
+
+  it('should report an error when RPC is healthy but the marketplace contract is absent', async () => {
+    soroban.contracts.purchaseContractId =
+      'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM';
+    await build();
+    fetchMock.mockImplementation(async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      if (body.method === 'getHealth') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ result: { status: 'healthy' } }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ result: { entries: [] } }),
+      };
+    });
+
+    const report = await service.check();
+
+    expect(report.status).toBe('error');
+    expect(find(report.checks, 'sorobanRpc').status).toBe('ok');
+    expect(find(report.checks, 'marketplaceContract')).toMatchObject({
+      status: 'error',
+      required: true,
+    });
+  });
+
+  it('should verify the configured marketplace contract through getLedgerEntries', async () => {
+    soroban.contracts.purchaseContractId =
+      'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM';
+    await build();
+    fetchMock.mockImplementation(async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      return body.method === 'getHealth'
+        ? {
+            ok: true,
+            status: 200,
+            json: async () => ({ result: { status: 'healthy' } }),
+          }
+        : {
+            ok: true,
+            status: 200,
+            json: async () => ({ result: { entries: [{ key: 'contract' }] } }),
+          };
+    });
+
+    const report = await service.check();
+
+    expect(report.status).toBe('ok');
+    expect(find(report.checks, 'marketplaceContract')).toMatchObject({
+      status: 'ok',
+      required: true,
+      detail: soroban.contracts.purchaseContractId,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(
+      fetchMock.mock.calls.some(([, init]) =>
+        String(init?.body).includes('getLedgerEntries'),
+      ),
+    ).toBe(true);
   });
 
   it('should surface a disabled delivery worker without failing the probe', async () => {
@@ -175,9 +251,22 @@ describe('HealthService', () => {
     );
 
     process.env.PROMPT_DELIVERY_WORKER_ENABLED = 'true';
+    process.env.AWS_KMS_KEY_ID = 'alias/test';
     expect(find((await service.check()).checks, 'deliveryWorker').status).toBe(
       'ok',
     );
+  });
+
+  it('should fail readiness when the delivery worker is enabled without a KMS key', async () => {
+    process.env.PROMPT_DELIVERY_WORKER_ENABLED = 'true';
+
+    const report = await service.check();
+
+    expect(report.status).toBe('error');
+    expect(find(report.checks, 'deliveryWorker')).toMatchObject({
+      status: 'error',
+      required: true,
+    });
   });
 
   it('should cache the Soroban RPC probe instead of calling it on every request', async () => {

@@ -19,9 +19,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Reserved for the encrypted prompt blob store. No application code imports
-  # @aws-sdk/client-s3 yet, so the api service does not wait on it; gating
-  # startup on a bucket nothing reads only adds a way for a clean deploy to hang.
   minio:
     image: minio/minio:latest
     container_name: agentverse-storage
@@ -61,7 +58,10 @@ services:
       # TypeORM auto-synchronize. Auto-sync against a migrated database silently
       # rewrites columns and indexes.
       DB_SYNCHRONIZE: ${DB_SYNCHRONIZE:-false}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret}
+      # No default. This stack defaults NODE_ENV to production, and wallet
+      # identity is derived from the JWT, so falling back to the published
+      # 'dev-secret' would let anyone mint a token for any wallet.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       PORT: 3000
       STELLAR_NETWORK: ${STELLAR_NETWORK:-testnet}
       STELLAR_RPC_URL: ${STELLAR_RPC_URL:-https://soroban-testnet.stellar.org}
@@ -69,6 +69,8 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
     depends_on:
       postgres:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     entrypoint: [ "/app/entrypoint.sh" ]
 

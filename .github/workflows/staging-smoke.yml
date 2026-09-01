@@ -45,6 +45,9 @@ jobs:
           --health-retries 5
 
     env:
+      # Keep migration and smoke processes under the same fail-closed
+      # deployment validation as the compiled application.
+      NODE_ENV: production
       DB_HOST: 127.0.0.1
       DB_PORT: 5432
       DB_USERNAME: postgres
@@ -60,12 +63,13 @@ jobs:
       STELLAR_NETWORK: testnet
       STELLAR_RPC_URL: https://soroban-testnet.stellar.org
       STELLAR_NETWORK_PASSPHRASE: Test SDF Network ; September 2015
-      # No long-lived signing key and no real contract id are configured here, and
-      # neither is stored as a secret. The smoke suite runs with none at all; the
-      # boot step alone exports a throwaway keypair it generates in-process and
-      # never signs with, plus PLACEHOLDER contract ids, because production env
-      # validation requires those variables to be present. See
-      # docs/release-runbook.md for what a configured environment needs.
+      SOROBAN_MARKETPLACE_CONTRACT_ID: PLACEHOLDER
+      CORS_ORIGINS: http://localhost:3000
+      AWS_REGION: us-east-1
+      # No long-lived signing key and no real contract id are configured here.
+      # The boot step exports a throwaway keypair in-process only; PLACEHOLDER
+      # keeps chain verification explicitly disabled for this DB/schema smoke.
+      # See docs/release-runbook.md for configured Testnet evidence.
 
     steps:
       - name: Checkout
@@ -164,7 +168,7 @@ jobs:
             if (report.status !== 'ok') failures.push('status is ' + report.status);
             if (byName.database?.status !== 'ok') failures.push('database check failed');
             if (byName.schema?.status !== 'ok') failures.push('schema check failed');
-            if (byName.schema?.detail !== 'AlignMigratedSchemaWithEntities1700000004000') {
+            if (byName.schema?.detail !== 'AddAuthChallenges1700000005000') {
               failures.push('unexpected applied migration: ' + byName.schema?.detail);
             }
             if (failures.length) { console.error(failures.join('; ')); process.exit(1); }

@@ -33,19 +33,21 @@ export function setupCompression(app: INestApplication) {
 }
 
 export function setupCors(app: INestApplication, allowedOrigins: string[] = DEFAULT_ALLOWED_ORIGINS) {
-  const origins = allowedOrigins.length ? allowedOrigins : DEFAULT_ALLOWED_ORIGINS;
+  const origins = allowedOrigins;
   const allowAll = origins.includes('*');
 
   app.enableCors({
     origin: allowAll
       ? true
-      : (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      : origins.length === 0
+        ? false
+        : (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
           if (!origin || origins.includes(origin)) {
             callback(null, true);
           } else {
             callback(new Error('not allowed by cors'));
           }
-        },
+          },
     preflightContinue: false,
     optionsSuccessStatus: 204,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',

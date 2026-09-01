@@ -6,6 +6,7 @@ import { ConfigModule } from '@nestjs/config';
 import { typeormConfig } from './database/typeorm.config';
 import { sorobanConfig } from './tokens/config/soroban.config';
 import { jwtConfig } from './config/jwt.config';
+import { paymentsConfig } from './config/payments.config';
 import { DatabaseModule } from './database/database.module';
 import { IndexerModule } from './indexer/indexer.module';
 import { AssetsModule } from './assets/assets.module';
@@ -22,7 +23,7 @@ import { ThrottlerGuard, ThrottlerModule, seconds } from '@nestjs/throttler';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [typeormConfig, sorobanConfig, jwtConfig],
+      load: [typeormConfig, sorobanConfig, jwtConfig, paymentsConfig],
       validate: validateEnv,
     }),
     ThrottlerModule.forRoot([

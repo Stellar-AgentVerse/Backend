@@ -118,8 +118,8 @@ describe('AuthController (integration)', () => {
 
   describe('POST /api/auth/wallet', () => {
     const publicKey = 'GBVERIFY...';
-    const validSignature = 'deadbeefcafe';
-    const invalidSignature = 'badbadbad';
+    const validSignature = 'deadbeef'.repeat(16);
+    const invalidSignature = 'badc0de0'.repeat(16);
 
     it('should return 401 when no challenge was requested', () => {
       return request(app.getHttpServer())

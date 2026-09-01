@@ -96,6 +96,16 @@ describe('setup helpers', () => {
     expect((callback.mock.calls[0][0] as Error).message).toBe('not allowed by cors');
   });
 
+  it('does not turn an empty real-deployment allowlist into wildcard cors', () => {
+    const app = createAppMock();
+
+    setupCors(app as never, []);
+
+    expect(app.enableCors).toHaveBeenCalledWith(
+      expect.objectContaining({ origin: false }),
+    );
+  });
+
   it('applies the application setup in order', () => {
     const app = createAppMock();
 

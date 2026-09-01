@@ -17,7 +17,10 @@ async function bootstrap() {
   app.use(requestIdMiddleware);
   setupApp(app, { allowedOrigins: env.corsOrigins });
   app.useGlobalFilters(new HttpExceptionFilter());
-  app.useGlobalInterceptors(new RequestLoggingInterceptor(), new ResponseInterceptor());
+  app.useGlobalInterceptors(
+    new RequestLoggingInterceptor(),
+    new ResponseInterceptor(),
+  );
   app.enableShutdownHooks();
   registerGracefulShutdown(app);
   setupSwagger(app);
@@ -28,7 +31,10 @@ async function bootstrap() {
       const dataSource = app.get(DataSource);
       await seedDatabase(dataSource);
     } catch (err) {
-      console.warn('Seed skipped (DB may not be ready):', (err as Error).message);
+      console.warn(
+        'Seed skipped (DB may not be ready):',
+        (err as Error).message,
+      );
     }
   } else {
     console.info('DB_SEED_ON_STARTUP is disabled; skipping seed.');
@@ -36,4 +42,12 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 3000);
 }
-bootstrap();
+
+// validateEnv throws for a deployment that is configured to simulate payments
+// or is missing a JWT signing key. Exit explicitly rather than relying on
+// Node's default unhandled-rejection behaviour, so the refusal to boot is
+// visible in logs and in the process exit code.
+bootstrap().catch((err) => {
+  console.error('Application failed to start:', (err as Error).message);
+  process.exit(1);
+});

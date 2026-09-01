@@ -1,21 +1,38 @@
 import { AppEnv, DEV_DEFAULTS } from './env.schema';
+import {
+  describeEnvironment,
+  isSimulationAllowed,
+  SIMULATION_ALLOWED_ENVIRONMENTS,
+} from './deployment-mode';
 
 let validatedEnvCache: AppEnv | null = null;
 
-const REQUIRED_IN_PRODUCTION = {
+/**
+ * Flags that put fabricated state into the running system: a payment adapter
+ * reporting success without a settlement, or the seed writing demo assets and
+ * credits. A deployment that is not explicitly development or test must not
+ * boot with any of them enabled.
+ */
+const SIMULATION_FLAGS = [
+  'PAYMENT_SIMULATION_ENABLED',
+  'MOCK_PAYMENT_ENABLED',
+  'MOCK_PAYMENT_FAIL',
+  // The seed writes demo assets and a 450-credit wallet. That is fabricated
+  // state, so it belongs to the same gate as fabricated payments.
+  'DB_SEED_ON_STARTUP',
+] as const;
+
+const REQUIRED_IN_REAL_DEPLOYMENT = {
   db: ['DB_HOST', 'DB_PORT', 'DB_USERNAME', 'DB_PASSWORD', 'DB_NAME'] as const,
   jwt: ['JWT_SECRET'] as const,
   stellar: [
     'STELLAR_NETWORK',
     'STELLAR_RPC_URL',
     'STELLAR_NETWORK_PASSPHRASE',
-    'SOROBAN_TOKEN_MINT_CONTRACT_ID',
-    'SOROBAN_TOKEN_SALE_CONTRACT_ID',
     'SOROBAN_MARKETPLACE_CONTRACT_ID',
-    'STELLAR_ADMIN_SECRET_KEY',
   ] as const,
   cors: ['CORS_ORIGINS'] as const,
-  aws: ['AWS_REGION', 'AWS_KMS_KEY_ID'] as const,
+  aws: ['AWS_REGION'] as const,
 };
 
 function parseBoolean(
@@ -72,7 +89,7 @@ function parseCorsOrigins(
   }
 
   if (!allowWildcard && origins.includes('*')) {
-    throw new Error('CORS_ORIGINS must list explicit origins in production');
+    throw new Error('CORS_ORIGINS must list explicit origins in real deployments');
   }
 
   for (const origin of origins) {
@@ -96,23 +113,79 @@ function ensureProductionRequirement(env: NodeJS.ProcessEnv, key: string) {
   }
 }
 
+function ensureDeploymentRequirement(env: NodeJS.ProcessEnv, key: string) {
+  if (env[key] === undefined || env[key]?.trim() === '') {
+    throw new Error(
+      `${key} is required when NODE_ENV is "${describeEnvironment(env)}". ` +
+        `Development fallbacks apply only when NODE_ENV is one of: ` +
+        `${SIMULATION_ALLOWED_ENVIRONMENTS.join(', ')}.`,
+    );
+  }
+}
+
+function ensureSimulationIsDisabled(env: NodeJS.ProcessEnv) {
+  for (const key of SIMULATION_FLAGS) {
+    if (parseBoolean(env[key], false, key)) {
+      throw new Error(
+        `${key} must be disabled when NODE_ENV is "${describeEnvironment(env)}". ` +
+          `Fabricated payments and seed data are only permitted when NODE_ENV ` +
+          `is one of: ${SIMULATION_ALLOWED_ENVIRONMENTS.join(', ')}.`,
+      );
+    }
+  }
+}
+
+function ensureDeliveryWorkerRequirements(env: NodeJS.ProcessEnv) {
+  if (
+    parseBoolean(
+      env.PROMPT_DELIVERY_WORKER_ENABLED,
+      false,
+      'PROMPT_DELIVERY_WORKER_ENABLED',
+    ) &&
+    (env.AWS_KMS_KEY_ID === undefined || env.AWS_KMS_KEY_ID.trim() === '')
+  ) {
+    throw new Error(
+      'AWS_KMS_KEY_ID is required when PROMPT_DELIVERY_WORKER_ENABLED is "true"',
+    );
+  }
+}
+
 export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
   const isProduction = env.NODE_ENV === 'production';
+  const simulationAllowed = isSimulationAllowed(env);
 
-  if (isProduction) {
-    ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.jwt[0]);
+  ensureDeliveryWorkerRequirements(env);
 
-    for (const key of REQUIRED_IN_PRODUCTION.db) {
-      ensureProductionRequirement(env, key);
+  // Checked before the production block so that staging — which is not
+  // `production` and so satisfies none of the rules below — still fails closed.
+  if (!simulationAllowed) {
+    ensureSimulationIsDisabled(env);
+
+    // Wallet identity is derived solely from the JWT, so a signing key that
+    // falls back to the published `dev-secret` would let anyone mint a token
+    // for any wallet. All real deployments must provide the complete runtime
+    // contract; only development and test may use defaults.
+    const required = [
+      ...REQUIRED_IN_REAL_DEPLOYMENT.db,
+      ...REQUIRED_IN_REAL_DEPLOYMENT.stellar,
+      ...REQUIRED_IN_REAL_DEPLOYMENT.cors,
+      ...REQUIRED_IN_REAL_DEPLOYMENT.aws,
+    ];
+
+    const ensureRequired = (key: string) => {
+      if (isProduction) {
+        ensureProductionRequirement(env, key);
+      } else {
+        ensureDeploymentRequirement(env, key);
+      }
+    };
+
+    // Keep JWT first so the most security-sensitive missing requirement is
+    // reported before the rest of the deployment contract.
+    ensureRequired(REQUIRED_IN_REAL_DEPLOYMENT.jwt[0]);
+    for (const key of required) {
+      ensureRequired(key);
     }
-
-    for (const key of REQUIRED_IN_PRODUCTION.stellar) {
-      ensureProductionRequirement(env, key);
-    }
-
-    ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.cors[0]);
-    ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.aws[0]);
-    ensureProductionRequirement(env, REQUIRED_IN_PRODUCTION.aws[1]);
   }
 
   const validated: AppEnv = {
@@ -124,7 +197,7 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
       database: env.DB_NAME ?? DEV_DEFAULTS.db.database,
       synchronize: parseBoolean(
         env.DB_SYNCHRONIZE,
-        isProduction ? false : DEV_DEFAULTS.db.synchronize,
+        simulationAllowed ? DEV_DEFAULTS.db.synchronize : false,
         'DB_SYNCHRONIZE',
       ),
       logging: parseBoolean(
@@ -134,7 +207,7 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
       ),
       seedOnStartup: parseBoolean(
         env.DB_SEED_ON_STARTUP,
-        !isProduction,
+        simulationAllowed,
         'DB_SEED_ON_STARTUP',
       ),
     },
@@ -162,10 +235,27 @@ export function validateEnv(env: NodeJS.ProcessEnv): AppEnv {
       adminSecretKey:
         env.STELLAR_ADMIN_SECRET_KEY ?? DEV_DEFAULTS.stellar.adminSecretKey,
     },
-    corsOrigins: parseCorsOrigins(env.CORS_ORIGINS, !isProduction),
+    corsOrigins: parseCorsOrigins(env.CORS_ORIGINS, simulationAllowed),
     aws: {
       region: env.AWS_REGION ?? DEV_DEFAULTS.aws.region,
       keyId: env.AWS_KMS_KEY_ID,
+    },
+    payments: {
+      // Guaranteed false outside development/test by ensureSimulationIsDisabled
+      // above; recomputed here so consumers read one validated value rather
+      // than three raw environment variables.
+      simulationEnabled:
+        simulationAllowed &&
+        (parseBoolean(
+          env.PAYMENT_SIMULATION_ENABLED,
+          DEV_DEFAULTS.payments.simulationEnabled,
+          'PAYMENT_SIMULATION_ENABLED',
+        ) ||
+          parseBoolean(
+            env.MOCK_PAYMENT_ENABLED,
+            DEV_DEFAULTS.payments.simulationEnabled,
+            'MOCK_PAYMENT_ENABLED',
+          )),
     },
   };
 
