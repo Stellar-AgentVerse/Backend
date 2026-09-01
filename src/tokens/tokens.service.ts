@@ -10,7 +10,7 @@ export class TokensService implements OnModuleInit {
   private readonly logger = new Logger(TokensService.name);
   private rpc!: StellarSdk.rpc.Server;
   private networkPassphrase!: string;
-  private adminKeypair!: StellarSdk.Keypair;
+  private adminKeypair?: StellarSdk.Keypair;
 
   constructor(
     @Inject(sorobanConfig.KEY)
@@ -27,10 +27,28 @@ export class TokensService implements OnModuleInit {
     this.rpc = new StellarSdk.rpc.Server(this.config.rpcUrl);
     this.networkPassphrase = this.config.networkPassphrase;
     this.validateConfig();
-    this.adminKeypair = StellarSdk.Keypair.fromSecret(
-      this.config.adminSecretKey,
-    );
+
+    // validateConfig() only warns when the admin secret is absent, so the
+    // keypair must be optional too — building it unconditionally turned that
+    // warning into a bootstrap crash and made the process unstartable without a
+    // long-lived signing key. Token operations now fail at the point of use.
+    if (this.config.adminSecretKey) {
+      this.adminKeypair = StellarSdk.Keypair.fromSecret(
+        this.config.adminSecretKey,
+      );
+    }
+
     this.logger.log(`Connected to Stellar RPC: ${this.config.rpcUrl}`);
+  }
+
+  private requireAdminKeypair(): StellarSdk.Keypair {
+    if (!this.adminKeypair) {
+      throw new Error(
+        'STELLAR_ADMIN_SECRET_KEY is not configured; token operations are unavailable',
+      );
+    }
+
+    return this.adminKeypair;
   }
 
   private validateConfig(): void {
@@ -91,7 +109,8 @@ export class TokensService implements OnModuleInit {
     fnName: string,
     args: StellarSdk.xdr.ScVal[],
   ): Promise<{ hash: string; finalStatus: string }> {
-    const account = await this.rpc.getAccount(this.adminKeypair.publicKey());
+    const adminKeypair = this.requireAdminKeypair();
+    const account = await this.rpc.getAccount(adminKeypair.publicKey());
 
     const contract = new StellarSdk.Contract(contractId);
     const tx = new StellarSdk.TransactionBuilder(account, {
@@ -104,7 +123,7 @@ export class TokensService implements OnModuleInit {
 
     const simResult = await this.rpc.simulateTransaction(tx);
     const assembled = StellarSdk.rpc.assembleTransaction(tx, simResult).build();
-    assembled.sign(this.adminKeypair);
+    assembled.sign(adminKeypair);
     const sendResponse = await this.rpc.sendTransaction(assembled);
     if (
       sendResponse.status === 'ERROR' ||
@@ -215,7 +234,9 @@ export class TokensService implements OnModuleInit {
     }
 
     try {
-      const account = await this.rpc.getAccount(this.adminKeypair.publicKey());
+      const account = await this.rpc.getAccount(
+        this.requireAdminKeypair().publicKey(),
+      );
 
       const contract = new StellarSdk.Contract(this.config.contracts.tokenMint);
       const tx = new StellarSdk.TransactionBuilder(account, {
@@ -232,7 +253,7 @@ export class TokensService implements OnModuleInit {
         .build();
 
       const simResult = await this.rpc.simulateTransaction(tx);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const retval = (simResult as any).result?.retval;
 
       if (!retval) {

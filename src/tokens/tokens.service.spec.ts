@@ -97,6 +97,43 @@ describe('TokensService', () => {
     jest.useRealTimers();
   });
 
+  describe('without a configured admin secret', () => {
+    async function bootWithoutAdminSecret(): Promise<TokensService> {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          TokensService,
+          {
+            provide: sorobanConfig.KEY,
+            useValue: { ...defaultConfig, adminSecretKey: '' },
+          },
+        ],
+      }).compile();
+
+      return module.get(TokensService);
+    }
+
+    it('starts without deriving a keypair instead of crashing the bootstrap', async () => {
+      const unconfigured = await bootWithoutAdminSecret();
+
+      // Previously this threw from Keypair.fromSecret(''), killing bootstrap.
+      // The next test covers the other half: no keypair was derived either.
+      expect(() => unconfigured.onModuleInit()).not.toThrow();
+    });
+
+    it('reports the missing secret when a token operation needs to sign', async () => {
+      const unconfigured = await bootWithoutAdminSecret();
+      unconfigured.onModuleInit();
+
+      const result = await unconfigured.mintTokens('GBUYER', '10');
+
+      expect(result).toEqual({
+        error: 'mintTokens failed',
+        details:
+          'STELLAR_ADMIN_SECRET_KEY is not configured; token operations are unavailable',
+      });
+    });
+  });
+
   it('initializes the Stellar RPC server on module init', () => {
     expect(StellarSdk.rpc.Server).toHaveBeenCalledWith('https://rpc.test');
     expect((service as any).rpc).toBeDefined();

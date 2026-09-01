@@ -54,11 +54,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
-
       - name: Test
         run: npm test
 
+      # The Jest config sets rootDir to "src", so `npm test` does not pick up
+      # anything under test/. Keep the integration suite in the CI gate.
+      - name: E2E test
+        run: npm run test:e2e
+
       - name: Build
         run: npm run build
+
+      # Lint remains last so test and build results are visible while the
+      # repository-wide debt tracked in Backend #14 is remediated.
+      - name: Lint
+        run: npm run lint
