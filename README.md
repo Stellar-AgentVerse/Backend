@@ -62,8 +62,10 @@ finding nothing to do.
 
 ## CI
 
-`.github/workflows/ci.yml` runs on push and pull request to `main`.
-It installs dependencies, then runs lint, tests, and build.
+`.github/workflows/ci.yml` runs on push and pull request to `main`. It installs
+dependencies, then runs unit tests, e2e tests and the build, with lint last so
+those results stay visible while the repository-wide lint debt tracked in #14 is
+worked through.
 
 `.github/workflows/staging-smoke.yml` provisions a throwaway production-like
 environment on the same events: it builds, applies migrations with the compiled
